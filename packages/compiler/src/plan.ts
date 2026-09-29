@@ -34,9 +34,16 @@ export function planMaterialization(
   const previous = stale ? {} : manifest.entities;
   const nextIds = new Set(entities.map((e) => e.id));
 
+  // compiledHash covers resolved content; lexicalHash covers the lexical
+  // surface (FTS config + search composition) which sanitizeForHash erases
+  // from the row — a lexical-only change must still upsert (spec/13:158).
   const upserts = stale
     ? [...entities]
-    : entities.filter((e) => previous[e.id]?.compiledHash !== e.compiledHash);
+    : entities.filter(
+        (e) =>
+          previous[e.id]?.compiledHash !== e.compiledHash ||
+          previous[e.id]?.lexicalHash !== e.lexicalHash,
+      );
 
   const deletes = Object.entries(previous)
     .filter(([id]) => !nextIds.has(id))

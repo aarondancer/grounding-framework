@@ -17,6 +17,7 @@
         "grounding": "./src/index.ts",
       },
       "dependencies": {
+        "@grounding/cache": "workspace:*",
         "@grounding/compiler": "workspace:*",
         "@grounding/core": "workspace:*",
         "@grounding/db": "workspace:*",
@@ -74,6 +75,7 @@
       "name": "@grounding/compiler",
       "version": "0.0.0",
       "dependencies": {
+        "@grounding/cache": "workspace:*",
         "@grounding/core": "workspace:*",
         "@grounding/db": "workspace:*",
         "@grounding/embeddings": "workspace:*",

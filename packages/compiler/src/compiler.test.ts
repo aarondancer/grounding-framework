@@ -1,7 +1,8 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { deterministicProvider } from "@grounding/embeddings";
 import { loadSourceTree } from "@grounding/source";
 import { build } from "./build.ts";
 import { compileTree } from "./ir.ts";
@@ -10,7 +11,7 @@ import { planMaterialization } from "./plan.ts";
 
 /** Minimal valid corpus (mirrors the packages/source fixture). */
 const FIXTURE: Record<string, string> = {
-  "grounding.config.jsonc": `{"version":1,"embedding":{"provider":"x","model":"m","dimensions":1536}}`,
+  "grounding.config.jsonc": `{"version":1,"embedding":{"provider":"deterministic","model":"m","dimensions":1536}}`,
   "namespace.jsonc": `{"id":"019d0000-0000-7000-8000-000000000001","key":"ns","name":"NS","defaultRetrievalProfile":"default"}`,
   "concepts/domains.jsonc": `{"domains":[{"id":"019d0000-0000-7000-8000-000000000010","key":"sales","name":"Sales"}]}`,
   "concepts/pipeline.jsonc": `{"id":"019d0000-0000-7000-8000-000000000020","key":"pipeline","name":"Pipeline","status":"published","domains":["sales"],"aliases":["Pipe"]}`,
@@ -187,6 +188,184 @@ describe("manifest + plan", () => {
 });
 
 /**
+ * M3 semantic/lexical materialization (spec/08, spec/13). Real PostgreSQL
+ * for vector/FTS/trigram/unaccent; deterministic + counting providers for
+ * the embedding lifecycle exit criteria.
+ */
+describe("embeddings + lexical indexing (real postgres)", () => {
+  const NS = "019e1000-0000-7000-8000-000000000001";
+  const hasDb = Boolean(process.env.DATABASE_URL);
+  const it = hasDb ? test : test.skip;
+
+  function countingProvider() {
+    const calls: string[][] = [];
+    const base = deterministicProvider(1536);
+    return {
+      calls,
+      provider: {
+        provider: "deterministic",
+        model: "sha256-fixture",
+        dimensions: 1536,
+        async embed(texts: string[]) {
+          calls.push(texts);
+          return base.embed(texts);
+        },
+      },
+    };
+  }
+
+  it("materializes semantic_entities + lexical columns; skips unchanged embeddings", async () => {
+    const { connect } = await import("@grounding/db");
+    const { sql } = await import("drizzle-orm");
+    const { pool, db } = connect();
+    const { calls, provider } = countingProvider();
+    try {
+      const { dir } = corpus(
+        {
+          "namespace.jsonc": `{"id":"${NS}","key":"m3","name":"M3","defaultRetrievalProfile":"default"}`,
+          // Accent + mixed-token coverage (spec/13 required cases).
+          "concepts/other.jsonc": `{"id":"019e1000-0000-7000-8000-000000000021","key":"other","name":"Café Metrics","status":"published"}`,
+          "knowledge/item.md": `---\n{"id":"019e1000-0000-7000-8000-000000000050","key":"item","title":"Item","status":"published","concepts":["pipeline"],"selectionGroup":"sg"}\n---\n\n# Item\n\nÆther straße café2\n\n## Section {#sec}\n\nbody\n`,
+        },
+        "019e1000",
+      );
+
+      const { semanticEntities } = await import("@grounding/db/schema");
+      const { count } = await import("drizzle-orm");
+
+      const b1 = await build(dir, db, { clean: true, provider });
+      expect(b1.diagnostics).toEqual([]);
+      expect(b1.ok).toBe(true);
+      const semanticCount = compileTree(loadSourceTree(dir)).entities.filter(
+        (e) => e.semanticHash !== undefined,
+      ).length;
+      const rows = await db
+        .select({ c: count() })
+        .from(semanticEntities)
+        .where(sql`${semanticEntities.namespaceId} = ${NS}`);
+      expect(Number(rows[0]?.c)).toBe(semanticCount);
+      expect(calls.length).toBeGreaterThan(0);
+
+      // Accent-insensitive normalized columns (PostgreSQL-authoritative).
+      const cafe = await db.execute(
+        sql`select normalized_name from concepts where id = '019e1000-0000-7000-8000-000000000021'`,
+      );
+      expect(cafe.rows[0]?.normalized_name).toBe("cafe metrics");
+      // Query-side equivalence: same pre-normalization (lowercase) + unaccent.
+      const eq1 = await db.execute(
+        sql`select count(*) c from concepts where namespace_id = ${NS} and normalized_name = unaccent('café metrics')`,
+      );
+      expect(Number(eq1.rows[0]?.c)).toBe(1);
+      // Trigram fuzzy discovery on normalized name.
+      const trgm = await db.execute(
+        sql`select count(*) c from concepts where namespace_id = ${NS} and normalized_name % 'cafe metrics'`,
+      );
+      expect(Number(trgm.rows[0]?.c)).toBe(1);
+      // FTS weighting: title at A, content tokens at B (café2 → cafe2).
+      const fts = await db.execute(
+        sql`select count(*) c from knowledge_chunks where namespace_id = ${NS} and search_vector @@ plainto_tsquery('grounding_english', 'cafe2')`,
+      );
+      expect(Number(fts.rows[0]?.c)).toBe(1);
+      const ftsA = await db.execute(
+        sql`select count(*) c from knowledge_chunks where namespace_id = ${NS} and search_vector @@ to_tsquery('grounding_english', 'item:A')`,
+      );
+      expect(Number(ftsA.rows[0]?.c)).toBeGreaterThan(0);
+      // spec/13 required accent-fold cases: Æther ↔ aether, straße ↔ strasse.
+      for (const q of ["aether", "strasse"]) {
+        const folded = await db.execute(
+          sql`select count(*) c from knowledge_chunks where namespace_id = ${NS} and search_vector @@ plainto_tsquery('grounding_english', ${q})`,
+        );
+        expect(Number(folded.rows[0]?.c)).toBe(1);
+      }
+
+      // Rebuild unchanged → no provider calls, no writes.
+      const callsAfterFirst = calls.length;
+      const b2 = await build(dir, db, { provider });
+      expect(b2.plan?.upserts).toEqual([]);
+      expect(calls.length).toBe(callsAfterFirst);
+
+      // Priority-only edit → entity upserts but embeddings do NOT regenerate.
+      const skillPath = join(dir, "agent-assembly/skills/s.jsonc");
+      const skillSrc = readFileSync(skillPath, "utf8").replace(
+        '"promptFragments":["pf"]',
+        '"promptFragments":["pf"],"priority":7',
+      );
+      writeFileSync(skillPath, skillSrc, "utf8");
+      const b3 = await build(dir, db, { provider });
+      expect(b3.ok).toBe(true);
+      expect(calls.length).toBe(callsAfterFirst);
+
+      // Semantic-text edit → that entity re-embeds.
+      writeFileSync(
+        skillPath,
+        skillSrc.replace('"semanticText":"x"', '"semanticText":"changed text"'),
+        "utf8",
+      );
+      const b4 = await build(dir, db, { provider });
+      expect(b4.ok).toBe(true);
+      expect(calls.length).toBeGreaterThan(callsAfterFirst);
+      const newHash = await db
+        .select({ h: semanticEntities.semanticHash })
+        .from(semanticEntities)
+        .where(sql`${semanticEntities.entityId} = '019e1000-0000-7000-8000-000000000081'`);
+      expect(newHash[0]?.h).not.toBe("");
+    } finally {
+      await db.execute(sql`delete from namespaces where id = ${NS}`);
+      await pool.end();
+    }
+  });
+
+  // spec/16: a different namespace with identical semantic texts is a pure
+  // cache hit — Valkey embedding-content keys carry config+semantic hashes.
+  const itCache = process.env.DATABASE_URL && process.env.VALKEY_ADDRESSES ? test : test.skip;
+  itCache("embedding-content cache serves repeated semantic text across namespaces", async () => {
+    const { connect } = await import("@grounding/db");
+    const { sql } = await import("drizzle-orm");
+    const { cacheConfigFromEnv, createRuntimeCache } = await import("@grounding/cache");
+    const { pool, db } = connect();
+    const cache = await createRuntimeCache(cacheConfigFromEnv());
+    const { calls, provider } = countingProvider();
+    const nsA = "019e2000-0000-7000-8000-000000000001";
+    const nsB = "019e3000-0000-7000-8000-000000000001";
+    // Per-run nonce: the embedding-content cache persists across test runs, so
+    // semantic text must be unique for corpus A's first build to be a miss.
+    const nonce = crypto.randomUUID().slice(0, 8);
+    const skillFile = FIXTURE["agent-assembly/skills/s.jsonc"].replaceAll(
+      '"semanticText":"x"',
+      `"semanticText":"x-${nonce}"`,
+    );
+    try {
+      const a = corpus(
+        {
+          "namespace.jsonc": `{"id":"${nsA}","key":"cache-a","name":"A","defaultRetrievalProfile":"default"}`,
+          "agent-assembly/skills/s.jsonc": skillFile,
+        },
+        "019e2000",
+      );
+      const b = corpus(
+        {
+          "namespace.jsonc": `{"id":"${nsB}","key":"cache-b","name":"B","defaultRetrievalProfile":"default"}`,
+          "agent-assembly/skills/s.jsonc": skillFile,
+        },
+        "019e3000",
+      );
+      const r1 = await build(a.dir, db, { clean: true, provider, cache });
+      expect(r1.ok).toBe(true);
+      const textsFirst = calls.flat().length;
+      expect(textsFirst).toBeGreaterThan(0);
+
+      const r2 = await build(b.dir, db, { clean: true, provider, cache });
+      expect(r2.ok).toBe(true);
+      expect(calls.flat().length).toBe(textsFirst); // zero provider calls
+    } finally {
+      await cache.close();
+      await db.execute(sql`delete from namespaces where id in (${nsA}, ${nsB})`);
+      await pool.end();
+    }
+  });
+});
+
+/**
  * Real-PostgreSQL build (spec exit criteria: source→empty PG, incremental
  * equivalence, deployment records). Skipped without DATABASE_URL; CI sets it.
  * Uses a distinct UUID prefix so it never collides with the canonical corpus.
@@ -206,13 +385,13 @@ describe("materialization (real postgres)", () => {
         },
         "019e0000",
       );
-      const first = await build(dir, db, { clean: true });
+      const first = await build(dir, db, { clean: true, provider: deterministicProvider(1536) });
       expect(first.diagnostics).toEqual([]);
       expect(first.ok).toBe(true);
       expect(first.plan?.full).toBe(true);
       expect(first.deploymentId).not.toBeNull();
 
-      const second = await build(dir, db, {});
+      const second = await build(dir, db, { provider: deterministicProvider(1536) });
       expect(second.ok).toBe(true);
       expect(second.plan?.full).toBe(false);
       expect(second.plan?.upserts).toEqual([]);

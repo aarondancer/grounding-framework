@@ -119,6 +119,15 @@ export type BuildProvenance = {
   embeddingConfigHash: string;
 };
 
+/** semantic_entities row (spec/08) — embedding computed outside the tx. */
+export type SemanticUpsert = {
+  entityType: string;
+  entityId: string;
+  semanticText: string;
+  semanticHash: string;
+  embedding: number[];
+};
+
 /**
  * The configured embedding dimension must equal the database vector
  * dimension before semantic materialization (spec/08). Returns the
@@ -156,7 +165,10 @@ export async function applyPlan(
   db: Database,
   plan: MaterializationPlan,
   provenance: BuildProvenance,
-  opts: { clean?: boolean } = {},
+  opts: {
+    clean?: boolean;
+    semantic?: { upserts: SemanticUpsert[]; deleteIds: string[] };
+  } = {},
 ): Promise<{ deploymentId: string }> {
   const deploymentId = newId();
   const ns = plan.namespaceId;
@@ -194,6 +206,7 @@ export async function applyPlan(
         const nsCol = NS_COL[table];
         if (nsCol) await tx.delete(ENTITY_TABLE[table]).where(eq(nsCol, ns));
       }
+      await tx.delete(t.semanticEntities).where(eq(t.semanticEntities.namespaceId, ns));
     }
 
     // Deletes first — deepest tables first per plan ordering; child rows
@@ -224,6 +237,45 @@ export async function applyPlan(
         if (child.rows.length > 0) {
           await tx.insert(CHILD_TABLE[child.table]).values(child.rows as never);
         }
+      }
+    }
+
+    // Semantic entities (embeddings computed before the tx; the row write
+    // itself stays transactional with the entity rows it belongs to).
+    if (opts.semantic) {
+      if (opts.semantic.deleteIds.length > 0) {
+        await tx
+          .delete(t.semanticEntities)
+          .where(
+            and(
+              eq(t.semanticEntities.namespaceId, ns),
+              inArray(t.semanticEntities.entityId, opts.semantic.deleteIds),
+            ),
+          );
+      }
+      for (const s of opts.semantic.upserts) {
+        await tx
+          .insert(t.semanticEntities)
+          .values({
+            namespaceId: ns,
+            entityType: s.entityType,
+            entityId: s.entityId,
+            semanticText: s.semanticText,
+            semanticHash: s.semanticHash,
+            embedding: s.embedding,
+          })
+          .onConflictDoUpdate({
+            target: [
+              t.semanticEntities.namespaceId,
+              t.semanticEntities.entityType,
+              t.semanticEntities.entityId,
+            ],
+            set: {
+              semanticText: s.semanticText,
+              semanticHash: s.semanticHash,
+              embedding: s.embedding,
+            },
+          });
       }
     }
 
@@ -287,7 +339,9 @@ export async function applyPlan(
         .from(ENTITY_TABLE[table])
         .where(inArray(ID_COL[table], ids));
       if (Number(rows[0]?.c ?? 0) !== ids.length) {
-        throw new Error(`verify failed: ${ids.length} ${table} upserts applied, ${rows[0]?.c ?? 0} present`);
+        throw new Error(
+          `verify failed: ${ids.length} ${table} upserts applied, ${rows[0]?.c ?? 0} present`,
+        );
       }
     }
     for (const del of plan.deletes) {

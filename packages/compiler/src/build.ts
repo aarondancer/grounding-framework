@@ -1,11 +1,23 @@
 import { execSync } from "node:child_process";
+import type { RuntimeCache } from "@grounding/cache";
 import type { Diagnostic } from "@grounding/core";
-import { hashObject } from "@grounding/core";
+import { hashObject, RuntimeErrorCode } from "@grounding/core";
 import type { Database } from "@grounding/db";
+import {
+  CachedEmbedder,
+  type EmbeddingConfig,
+  type EmbeddingProvider,
+  resolveProvider,
+} from "@grounding/embeddings";
 import { loadSourceTree, validateTree } from "@grounding/source";
-import { compileTree } from "./ir.ts";
+import { compileTree, type EntityTable } from "./ir.ts";
 import { COMPILER_VERSION, readManifest, saveManifest, writeManifest } from "./manifest.ts";
-import { applyPlan, type BuildProvenance, checkEmbeddingDimension } from "./materialize.ts";
+import {
+  applyPlan,
+  type BuildProvenance,
+  checkEmbeddingDimension,
+  type SemanticUpsert,
+} from "./materialize.ts";
 import { type MaterializationPlan, planMaterialization } from "./plan.ts";
 
 /**
@@ -19,6 +31,19 @@ export type BuildOptions = {
   clean?: boolean | undefined;
   dryRun?: boolean | undefined;
   environment?: string | undefined;
+  /** Resolved embedding provider; absent → resolved from config + env lazily. */
+  provider?: EmbeddingProvider | undefined;
+  /** Valkey embedding-content cache; absent → provider called directly. */
+  cache?: RuntimeCache | null | undefined;
+};
+
+/** semantic_entities.entity_type per entity table (spec/08). */
+const SEMANTIC_ENTITY_TYPE: Partial<Record<EntityTable, string>> = {
+  concepts: "concept",
+  knowledge_chunks: "knowledge_chunk",
+  prompt_fragments: "prompt_fragment",
+  skills: "skill",
+  tools: "tool",
 };
 
 export type BuildResult = {
@@ -73,11 +98,21 @@ export async function build(
   }
 
   const environment = opts.environment ?? process.env.GROUNDING_ENV ?? "local";
+  const embeddingConfig = (loaded.config?.embedding ?? {}) as EmbeddingConfig;
   const embeddingDimensions =
-    typeof loaded.config?.embedding === "object" && loaded.config.embedding !== null
-      ? ((loaded.config.embedding as Record<string, unknown>).dimensions as number | undefined)
-      : undefined;
-  const embeddingConfigHash = hashObject(loaded.config?.embedding ?? null);
+    typeof embeddingConfig.dimensions === "number" ? embeddingConfig.dimensions : undefined;
+  // Resolve the effective provider eagerly: the config hash that keys the
+  // embedding-content cache and deployment provenance must reflect the
+  // resolved provider (env overrides change vector semantics — spec/16:61).
+  const resolvedProvider = opts.provider ?? resolveProvider(embeddingConfig, process.env);
+  const embeddingConfigHash =
+    "embed" in resolvedProvider
+      ? hashObject({
+          provider: resolvedProvider.provider,
+          model: resolvedProvider.model,
+          dimensions: resolvedProvider.dimensions,
+        })
+      : hashObject(embeddingConfig);
 
   // spec/08: configured dimensions must equal the migrated vector dimension.
   if (typeof embeddingDimensions === "number") {
@@ -104,8 +139,81 @@ export async function build(
     embeddingConfigHash,
   };
 
+  // Semantic work: only entities whose semanticHash changed need fresh
+  // embeddings (spec: priority-only edits must not recompute). The Valkey
+  // embedding-content cache absorbs cross-build repeats.
+  const semanticDeleteIds = new Set(plan.deletes.map((d) => d.id));
+  const embedWork = plan.upserts.filter((e) => {
+    // entity-level semanticHash is only set when semantic text exists.
+    const semantic = SEMANTIC_ENTITY_TYPE[e.table] !== undefined && e.semanticHash !== undefined;
+    const hadSemantic = manifest?.entities[e.id]?.semanticHash !== undefined;
+    if (!semantic && hadSemantic) semanticDeleteIds.add(e.id); // semantic text removed
+    return semantic && manifest?.entities[e.id]?.semanticHash !== e.semanticHash;
+  });
+
+  const semanticUpserts: SemanticUpsert[] = [];
+  if (!("embed" in resolvedProvider)) {
+    // Unresolvable provider is fatal only when semantic work exists; a
+    // corpus with nothing to embed just carries the diagnostic forward.
+    diagnostics.push({ ...resolvedProvider, severity: embedWork.length > 0 ? "error" : "warning" });
+    if (embedWork.length > 0) {
+      return { ok: false, diagnostics, plan, deploymentId: null, sourceHash: compiled.sourceHash };
+    }
+  }
+  if (embedWork.length > 0 && "embed" in resolvedProvider) {
+    const provider = resolvedProvider;
+    try {
+      const embedder = new CachedEmbedder(opts.cache ?? null, embeddingConfigHash);
+      const vectors = await embedder.embed(
+        provider,
+        embedWork.flatMap((e) =>
+          e.semanticHash !== undefined && e.semanticText !== undefined
+            ? [{ semanticHash: e.semanticHash, semanticText: e.semanticText }]
+            : [],
+        ),
+      );
+      for (const e of embedWork) {
+        const entityType = SEMANTIC_ENTITY_TYPE[e.table];
+        const vec = e.semanticHash !== undefined ? vectors.get(e.semanticHash) : undefined;
+        if (!vec || !entityType || e.semanticText === undefined || e.semanticHash === undefined) {
+          diagnostics.push({
+            severity: "error",
+            code: RuntimeErrorCode.EMBEDDING_UNAVAILABLE,
+            message: `no embedding produced for ${e.kind} ${e.id}`,
+            location: { path: e.sourcePath },
+          });
+          return {
+            ok: false,
+            diagnostics,
+            plan,
+            deploymentId: null,
+            sourceHash: compiled.sourceHash,
+          };
+        }
+        semanticUpserts.push({
+          entityType,
+          entityId: e.id,
+          semanticText: e.semanticText,
+          semanticHash: e.semanticHash,
+          embedding: vec,
+        });
+      }
+    } catch (err) {
+      diagnostics.push({
+        severity: "error",
+        code: RuntimeErrorCode.EMBEDDING_UNAVAILABLE,
+        message: err instanceof Error ? err.message : String(err),
+      });
+      return { ok: false, diagnostics, plan, deploymentId: null, sourceHash: compiled.sourceHash };
+    }
+  }
+
   const { deploymentId } = await applyPlan(db, plan, provenance, {
     clean: opts.clean ?? false,
+    semantic: {
+      upserts: semanticUpserts,
+      deleteIds: [...semanticDeleteIds],
+    },
   });
 
   const nextManifest = writeManifest(root, {

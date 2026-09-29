@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { execSync } from "node:child_process";
 import { isAbsolute, relative } from "node:path";
+import { cacheConfigFromEnv, createRuntimeCache } from "@grounding/cache";
 import { build, readManifest } from "@grounding/compiler";
 import { type Diagnostic, RuntimeErrorCode } from "@grounding/core";
 import { connect } from "@grounding/db";
@@ -213,8 +214,14 @@ async function runBuild(opts: {
   }
 
   const { pool, db } = connect();
+  // Cache failure/degradation is a miss (spec/16) — never fatal to a build.
+  const cache = await createRuntimeCache(cacheConfigFromEnv()).catch(() => null);
   try {
-    const result = await build(root, db, { clean: opts.clean, dryRun: opts.dryRun });
+    const result = await build(root, db, {
+      clean: opts.clean,
+      dryRun: opts.dryRun,
+      cache,
+    });
     if (opts.format === "json") {
       process.stdout.write(
         `${JSON.stringify({
@@ -240,6 +247,7 @@ async function runBuild(opts: {
     }
     return result.ok ? 0 : 1;
   } finally {
+    await cache?.close();
     await pool.end();
   }
 }
@@ -253,6 +261,7 @@ async function runDev(): Promise<void> {
     return;
   }
   const { pool, db } = connect();
+  const cache = await createRuntimeCache(cacheConfigFromEnv()).catch(() => null);
 
   let timer: ReturnType<typeof setTimeout> | null = null;
   let running = false;
@@ -266,7 +275,7 @@ async function runDev(): Promise<void> {
     running = true;
     do {
       dirty = false;
-      const result = await build(root, db, {});
+      const result = await build(root, db, { cache });
       const errors = result.diagnostics.filter((d) => d.severity === "error").length;
       console.error(
         result.ok
@@ -298,6 +307,7 @@ async function runDev(): Promise<void> {
   await new Promise<void>((resolve) => {
     process.on("SIGINT", () => {
       void watcher.close().then(async () => {
+        await cache?.close();
         await pool.end();
         resolve();
       });

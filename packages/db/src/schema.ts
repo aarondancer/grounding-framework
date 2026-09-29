@@ -533,9 +533,13 @@ export const retrievalProfiles = pgTable(
 );
 
 /**
- * NOTE: the vector dimension is substituted at migration-generation time from
- * the installation's configured embedding dimension (spec/08).
+ * The vector dimension is substituted at migration-generation time from the
+ * installation's configured embedding dimension via GROUNDING_EMBEDDING_
+ * DIMENSIONS (spec/08); the runtime build verifies atttypmod against the
+ * authored config and refuses mismatches.
  */
+const EMBEDDING_DIMENSIONS = Number(process.env.GROUNDING_EMBEDDING_DIMENSIONS ?? "1536");
+
 export const semanticEntities = pgTable(
   "semantic_entities",
   {
@@ -546,7 +550,7 @@ export const semanticEntities = pgTable(
     entityId: uuid("entity_id").notNull(),
     semanticText: text("semantic_text").notNull(),
     semanticHash: text("semantic_hash").notNull(),
-    embedding: vector("embedding", { dimensions: 1536 }).notNull(),
+    embedding: vector("embedding", { dimensions: EMBEDDING_DIMENSIONS }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

@@ -13,6 +13,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@grounding/cache": "workspace:*",
     "@grounding/compiler": "workspace:*",
     "@grounding/core": "workspace:*",
     "@grounding/db": "workspace:*",

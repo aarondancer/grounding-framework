@@ -86,6 +86,8 @@ export type CompiledEntity = {
   /** Hash of the fully resolved row group (IDs, not keys). */
   compiledHash: string;
   semanticHash?: string | undefined;
+  /** Semantic text used for embedding — needed to write semantic_entities. */
+  semanticText?: string | undefined;
   lexicalHash?: string | undefined;
   deps: { target: string; kind: DepKind }[];
 };
@@ -323,6 +325,7 @@ export function compileTree(loaded: LoadResult): CompileResult {
           sourceHash: src,
           compiledHash: "",
           semanticHash,
+          semanticText,
           deps,
         });
         break;
@@ -477,7 +480,15 @@ export function compileTree(loaded: LoadResult): CompileResult {
         break;
       }
       case "knowledge-item": {
-        compileKnowledgeItem(e, namespaceId, knowledgeByPath.get(e.path), src, emit, refDeps, index);
+        compileKnowledgeItem(
+          e,
+          namespaceId,
+          knowledgeByPath.get(e.path),
+          src,
+          emit,
+          refDeps,
+          index,
+        );
         break;
       }
       case "agent-template": {
@@ -570,6 +581,7 @@ export function compileTree(loaded: LoadResult): CompileResult {
           sourceHash: src,
           compiledHash: "",
           semanticHash: fragmentSemanticHash,
+          semanticText: fragmentSemanticText,
           deps,
         });
         break;
@@ -585,7 +597,8 @@ export function compileTree(loaded: LoadResult): CompileResult {
         const fragmentIds = strArr(d.promptFragments)
           .map((v) => refDeps(e, deps, v, "prompt-fragment"))
           .filter((x): x is string => x !== null);
-        const semanticText = authoredSemanticText(d) ?? "";
+        const authoredSemantic = authoredSemanticText(d);
+        const semanticText = authoredSemantic ?? "";
         const semanticHash = hashObject({ t: semanticText });
         emit({
           id,
@@ -640,7 +653,10 @@ export function compileTree(loaded: LoadResult): CompileResult {
           sourcePath: e.path,
           sourceHash: src,
           compiledHash: "",
-          semanticHash,
+          // entity-level semanticHash marks semantic indexability: absent
+          // authored semanticText → no semantic_entities row.
+          semanticHash: authoredSemantic ? semanticHash : undefined,
+          semanticText: authoredSemantic,
           deps,
         });
         break;
@@ -650,7 +666,8 @@ export function compileTree(loaded: LoadResult): CompileResult {
         const conceptIds = strArr(d.concepts)
           .map((v) => refDeps(e, deps, v, "concept"))
           .filter((x): x is string => x !== null);
-        const semanticText = authoredSemanticText(d) ?? "";
+        const authoredSemantic = authoredSemanticText(d);
+        const semanticText = authoredSemantic ?? "";
         const semanticHash = hashObject({ t: semanticText });
         emit({
           id,
@@ -691,7 +708,8 @@ export function compileTree(loaded: LoadResult): CompileResult {
           sourcePath: e.path,
           sourceHash: src,
           compiledHash: "",
-          semanticHash,
+          semanticHash: authoredSemantic ? semanticHash : undefined,
+          semanticText: authoredSemantic,
           deps,
         });
         // Tool dependencies are first-class derived entities (FK restrict on
@@ -923,11 +941,15 @@ function compileKnowledgeItem(
     const semanticText = chunkSemanticText(title, headingPath, chunk.content);
     const semanticHash = hashObject({ t: semanticText });
     const heading = sec?.heading ?? null;
+    // search_vector composition (spec/13, normative): item title + heading
+    // path at weight A, chunk content at B, linked concept names at C —
+    // all through the shared grounding_english config.
+    const weightAText = [title, ...headingPath].filter((s) => s.length > 0).join(" ");
+    const weightCText = conceptNames.join(" ");
     const chunkLexicalHash = lexicalHash("grounding_english", {
-      title: normalizeForLexical(title),
-      heading: heading ? normalizeForLexical(heading) : null,
-      content: chunk.content,
-      concepts: conceptNames,
+      a: weightAText,
+      b: chunk.content,
+      c: weightCText,
     });
     const chunkDeps: CompiledEntity["deps"] = [
       { target: id, kind: "structural" },
@@ -958,6 +980,12 @@ function compileKnowledgeItem(
         selectionGroupId,
         authorizationExpression: d.authorization ?? null,
         applicabilityExpression: d.applicability ?? null,
+        searchText: [weightAText, chunk.content, weightCText]
+          .filter((s) => s.length > 0)
+          .join("\n"),
+        searchVector: sql`setweight(to_tsvector('grounding_english', ${weightAText}), 'A')
+          || setweight(to_tsvector('grounding_english', ${chunk.content}), 'B')
+          || setweight(to_tsvector('grounding_english', ${weightCText}), 'C')`,
         contentHash: hashObject({ t: chunk.content }),
         sourcePath: e.path,
         semanticHash,
@@ -979,6 +1007,7 @@ function compileKnowledgeItem(
       sourceHash: src,
       compiledHash: "",
       semanticHash,
+      semanticText,
       lexicalHash: chunkLexicalHash,
       deps: chunkDeps,
     });
