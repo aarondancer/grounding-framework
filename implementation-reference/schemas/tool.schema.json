@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "id",
+    "key",
+    "name",
+    "status",
+    "description",
+    "runtimeBinding",
+    "semanticText"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "key": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "published",
+        "deprecated"
+      ]
+    },
+    "description": {
+      "type": "string"
+    },
+    "runtimeBinding": {
+      "type": "string"
+    },
+    "concepts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "authorization": {
+      "$ref": "common.schema.json#/$defs/expression"
+    },
+    "applicability": {
+      "$ref": "common.schema.json#/$defs/expression"
+    },
+    "selectionGroup": {
+      "type": "string"
+    },
+    "priority": {
+      "type": "integer"
+    },
+    "risk": {
+      "enum": [
+        "read",
+        "write",
+        "destructive",
+        "privileged"
+      ]
+    },
+    "latency": {
+      "enum": [
+        "local",
+        "fast_remote",
+        "slow_remote"
+      ]
+    },
+    "semanticText": {
+      "type": "string",
+      "minLength": 1
+    },
+    "inputSchema": {
+      "type": "object"
+    },
+    "outputSchema": {
+      "type": "object"
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "tool",
+          "requirement"
+        ],
+        "properties": {
+          "tool": {
+            "type": "string"
+          },
+          "requirement": {
+            "enum": [
+              "required",
+              "optional"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "metadata": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}

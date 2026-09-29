@@ -1,0 +1,14 @@
+{
+  "name": "pipeline analysis agent",
+  "template": "analytics-assistant",
+  "task": "Analyze our pipeline over the last 90 days",
+  "context": {
+    "roles": ["manager"],
+    "permissions": ["analytics.read"],
+    "products": ["crm"]
+  },
+  "expect": {
+    "skills": ["pipeline-analysis"],
+    "tools": ["analytics.queryTeamMetrics", "auth.resolveTeamScope"]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "id": "019d0000-0000-7000-8000-000000000100",
+  "key": "auth.resolveTeamScope",
+  "name": "Resolve Team Scope",
+  "status": "published",
+  "description": "Resolve the team scope available to the current user.",
+  "runtimeBinding": "auth.resolveTeamScope",
+  "risk": "read",
+  "latency": "local",
+  "semanticText": "Resolve which team or organizational scope is available to the current user."
+}

@@ -1,0 +1,6 @@
+{
+  "relationTypes": [
+    {"id":"019d0000-0000-7000-8000-000000000030","key":"related_to","name":"Related To"},
+    {"id":"019d0000-0000-7000-8000-000000000031","key":"measures","name":"Measures"}
+  ]
+}

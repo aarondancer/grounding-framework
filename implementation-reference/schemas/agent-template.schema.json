@@ -1,0 +1,12 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "type":"object",
+  "required":["id","key","name","status"],
+  "properties":{
+    "id":{"type":"string","format":"uuid"},"key":{"type":"string"},"name":{"type":"string"},"description":{"type":"string"},
+    "status":{"enum":["draft","published","deprecated"]},"promptFragments":{"type":"array","items":{"type":"string"}},
+    "retrievalProfile":{"type":"string"},
+    "budgets":{"type":"object","properties":{"maxSkills":{"type":"integer","minimum":0},"maxTools":{"type":"integer","minimum":0},"promptTokens":{"type":"integer","minimum":0},"bootstrapKnowledgeTokens":{"type":"integer","minimum":0}},"additionalProperties":false},
+    "metadata":{"type":"object"}
+  },"additionalProperties":false
+}

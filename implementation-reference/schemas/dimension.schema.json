@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "id",
+    "key",
+    "name",
+    "valueType",
+    "cardinality",
+    "category",
+    "allowedOperators"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "key": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "valueType": {
+      "enum": [
+        "string",
+        "number",
+        "boolean",
+        "date",
+        "enum"
+      ]
+    },
+    "cardinality": {
+      "enum": [
+        "single",
+        "multi"
+      ]
+    },
+    "category": {
+      "enum": [
+        "authorization",
+        "eligibility",
+        "applicability",
+        "ranking",
+        "descriptive"
+      ]
+    },
+    "allowedOperators": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "equals",
+          "not_equals",
+          "includes",
+          "includes_all",
+          "includes_any",
+          "in",
+          "not_in",
+          "gt",
+          "gte",
+          "lt",
+          "lte",
+          "between",
+          "exists",
+          "not_exists"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "hierarchical": {
+      "type": "boolean"
+    },
+    "required": {
+      "type": "boolean"
+    },
+    "missingValueBehavior": {
+      "enum": [
+        "no_match",
+        "unknown",
+        "ignore"
+      ]
+    },
+    "trust": {
+      "enum": [
+        "server",
+        "request"
+      ]
+    },
+    "values": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "key"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "parent": {
+            "type": "string"
+          },
+          "sortOrder": {
+            "type": "integer"
+          },
+          "metadata": {
+            "type": "object"
+          }
+        },
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "metadata": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "valueType": {
+            "const": "enum"
+          }
+        },
+        "required": [
+          "valueType"
+        ]
+      },
+      "then": {
+        "required": [
+          "values"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "values"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "hierarchical": {
+            "const": true
+          }
+        },
+        "required": [
+          "hierarchical"
+        ]
+      },
+      "then": {
+        "properties": {
+          "valueType": {
+            "const": "enum"
+          }
+        }
+      }
+    }
+  ]
+}

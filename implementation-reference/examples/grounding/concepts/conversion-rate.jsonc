@@ -1,0 +1,9 @@
+{
+  "id": "019d0000-0000-7000-8000-000000000020",
+  "key": "conversion-rate",
+  "name": "Conversion Rate",
+  "type": "metric",
+  "description": "The proportion of eligible records that convert from one state or stage to another.",
+  "aliases": ["close rate", "conversion percentage"],
+  "domains": ["sales", "analytics"]
+}

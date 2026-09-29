@@ -1,0 +1,13 @@
+{
+  "name": "manager pipeline guidance",
+  "query": "How can I improve pipeline conversion?",
+  "context": {
+    "roles": ["manager"],
+    "permissions": ["analytics.read"],
+    "products": ["crm"]
+  },
+  "expect": {
+    "resolvedConcepts": ["conversion-rate"],
+    "topK": [{"chunk": "improving-conversion#stage-progression", "within": 5}]
+  }
+}

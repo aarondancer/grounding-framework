@@ -1,0 +1,17 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "type":"object",
+  "required":["id","key","name"],
+  "properties":{
+    "id":{"type":"string","format":"uuid"},
+    "key":{"type":"string","minLength":1},
+    "name":{"type":"string","minLength":1},
+    "type":{"type":"string"},
+    "description":{"type":"string"},
+    "status":{"enum":["draft","published","deprecated"]},
+    "aliases":{"type":"array","items":{"type":"string"},"uniqueItems":true},
+    "domains":{"type":"array","items":{"type":"string"},"uniqueItems":true},
+    "metadata":{"type":"object"}
+  },
+  "additionalProperties":false
+}

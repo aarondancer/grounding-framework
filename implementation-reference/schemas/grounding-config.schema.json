@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "version",
+    "embedding"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "repository": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "embedding": {
+      "type": "object",
+      "required": [
+        "provider",
+        "model",
+        "dimensions"
+      ],
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "dimensions": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": true
+    },
+    "metadata": {
+      "type": "object"
+    },
+    "chunking": {
+      "type": "object",
+      "properties": {
+        "maxCharacters": {
+          "type": "integer",
+          "minimum": 256,
+          "default": 6000
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

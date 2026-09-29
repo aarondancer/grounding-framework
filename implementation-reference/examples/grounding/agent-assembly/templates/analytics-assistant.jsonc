@@ -1,0 +1,14 @@
+{
+  "id": "019d0000-0000-7000-8000-000000000120",
+  "key": "analytics-assistant",
+  "name": "Analytics Assistant",
+  "status": "published",
+  "promptFragments": ["agent/base"],
+  "retrievalProfile": "bootstrap",
+  "budgets": {
+    "maxSkills": 6,
+    "maxTools": 12,
+    "promptTokens": 6000,
+    "bootstrapKnowledgeTokens": 5000
+  }
+}

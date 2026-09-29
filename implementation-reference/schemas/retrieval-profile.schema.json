@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "id",
+    "key"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "key": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "candidates": {
+      "type": "object",
+      "properties": {
+        "vector": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fullText": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "trigram": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "conceptLinked": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "concepts": {
+      "type": "object",
+      "properties": {
+        "maxSeeds": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "graph": {
+      "type": "object",
+      "properties": {
+        "maxDepth": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "direction": {
+          "enum": [
+            "incoming",
+            "outgoing",
+            "both"
+          ]
+        },
+        "relationTypes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "candidateLimit": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "packing": {
+      "type": "object",
+      "properties": {
+        "maxChunks": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxTokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxChunksPerItem": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "metadata": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}

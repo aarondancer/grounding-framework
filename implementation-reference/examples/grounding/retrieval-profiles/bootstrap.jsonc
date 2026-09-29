@@ -1,0 +1,9 @@
+{
+  "id": "019d0000-0000-7000-8000-000000000071",
+  "key": "bootstrap",
+  "name": "Bootstrap",
+  "candidates": {"vector":40,"fullText":30,"trigram":15,"conceptLinked":25},
+  "concepts": {"maxSeeds":4},
+  "graph": {"maxDepth":1,"candidateLimit":30,"direction":"both"},
+  "packing": {"maxChunks":6,"maxTokens":5000,"maxChunksPerItem":2}
+}

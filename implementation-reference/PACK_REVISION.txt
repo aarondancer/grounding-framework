@@ -1,0 +1,8 @@
+Grounding Platform v1 Implementation Pack
+Revision: 5
+Date: 2026-09-29
+
+Revision 5 locks the concrete implementation stack and Valkey production-cache architecture:
+Bun/TypeScript; TanStack Start + React; Elysia + GraphQL Yoga; urql + Graphcache;
+Base UI + Tailwind; PostgreSQL 17 + Drizzle + pg; Valkey + Valkey GLIDE; OrbStack for
+local Docker/Compose-compatible services.

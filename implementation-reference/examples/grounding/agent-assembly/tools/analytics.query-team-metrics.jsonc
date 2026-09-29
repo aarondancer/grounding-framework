@@ -1,0 +1,20 @@
+{
+  "id": "019d0000-0000-7000-8000-000000000101",
+  "key": "analytics.queryTeamMetrics",
+  "name": "Query Team Metrics",
+  "status": "published",
+  "description": "Query aggregated team performance metrics over a date range.",
+  "runtimeBinding": "analytics.queryTeamMetrics",
+  "concepts": ["conversion-rate", "sales-pipeline"],
+  "authorization": {
+    "allOf": [
+      {"dimension":"permissions","operator":"includes","value":"analytics.read"}
+    ]
+  },
+  "risk": "read",
+  "latency": "fast_remote",
+  "semanticText": "Query team analytics, pipeline metrics, conversion rates, and historical trends.",
+  "dependencies": [
+    {"tool":"auth.resolveTeamScope","requirement":"required"}
+  ]
+}

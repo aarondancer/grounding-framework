@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "common.schema.json",
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "lifecycle": {
+      "enum": [
+        "draft",
+        "published",
+        "deprecated"
+      ]
+    },
+    "operator": {
+      "enum": [
+        "equals",
+        "not_equals",
+        "includes",
+        "includes_all",
+        "includes_any",
+        "in",
+        "not_in",
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "between",
+        "exists",
+        "not_exists"
+      ]
+    },
+    "expression": {
+      "oneOf": [
+        {
+          "type": "object",
+          "maxProperties": 0
+        },
+        {
+          "type": "object",
+          "required": [
+            "allOf"
+          ],
+          "properties": {
+            "allOf": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/expression"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "anyOf"
+          ],
+          "properties": {
+            "anyOf": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/expression"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "noneOf"
+          ],
+          "properties": {
+            "noneOf": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/expression"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "dimension",
+            "operator"
+          ],
+          "properties": {
+            "dimension": {
+              "type": "string",
+              "minLength": 1
+            },
+            "operator": {
+              "enum": [
+                "exists",
+                "not_exists"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "dimension",
+            "operator",
+            "value"
+          ],
+          "properties": {
+            "dimension": {
+              "type": "string",
+              "minLength": 1
+            },
+            "operator": {
+              "enum": [
+                "equals",
+                "not_equals",
+                "includes",
+                "includes_all",
+                "includes_any",
+                "in",
+                "not_in",
+                "gt",
+                "gte",
+                "lt",
+                "lte",
+                "between"
+              ]
+            },
+            "value": {
+              "not": {
+                "type": "null"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "metadata": {
+      "type": "object"
+    }
+  }
+}

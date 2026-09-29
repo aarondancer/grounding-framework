@@ -1,0 +1,17 @@
+{
+  "id": "019d0000-0000-7000-8000-000000000051",
+  "key": "roles",
+  "name": "Roles",
+  "valueType": "enum",
+  "cardinality": "multi",
+  "category": "applicability",
+  "allowedOperators": ["includes", "includes_any", "includes_all", "exists"],
+  "hierarchical": false,
+  "required": false,
+  "missingValueBehavior": "no_match",
+  "trust": "server",
+  "values": [
+    {"id":"019d0000-0000-7000-8000-000000000052","key":"manager","name":"Manager"},
+    {"id":"019d0000-0000-7000-8000-000000000053","key":"analyst","name":"Analyst"}
+  ]
+}

@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "id",
+    "key",
+    "name",
+    "status",
+    "inclusion",
+    "section"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "key": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "published",
+        "deprecated"
+      ]
+    },
+    "inclusion": {
+      "enum": [
+        "always",
+        "applicable",
+        "task_relevant"
+      ]
+    },
+    "section": {
+      "type": "string"
+    },
+    "order": {
+      "type": "integer"
+    },
+    "concepts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "authorization": {
+      "$ref": "common.schema.json#/$defs/expression"
+    },
+    "applicability": {
+      "$ref": "common.schema.json#/$defs/expression"
+    },
+    "selectionGroup": {
+      "type": "string"
+    },
+    "priority": {
+      "type": "integer"
+    },
+    "semanticText": {
+      "type": "string",
+      "minLength": 1
+    },
+    "metadata": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "inclusion": {
+            "const": "task_relevant"
+          }
+        },
+        "required": [
+          "inclusion"
+        ]
+      },
+      "then": {
+        "required": [
+          "semanticText"
+        ]
+      }
+    }
+  ]
+}
