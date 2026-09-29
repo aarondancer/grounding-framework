@@ -60,6 +60,17 @@ jobs:
       - name: Production build
         run: bun run --filter='@grounding/web' build
 
+      # Smoke must not depend on whatever namespace state tests happened to
+      # leave behind — materialize the canonical corpus explicitly.
+      - name: Seed canonical corpus
+        run: bun apps/cli/src/index.ts build --clean
+        env:
+          DATABASE_URL: postgresql://grounding:grounding@localhost:5432/grounding
+          GROUNDING_ENV: local
+          # Canonical corpus authors openai-compatible; no endpoint exists in
+          # CI, so build with the deterministic provider.
+          GROUNDING_EMBEDDING_PROVIDER: deterministic
+
       - name: Production boot smoke
         env:
           DATABASE_URL: postgresql://grounding:grounding@localhost:5432/grounding
