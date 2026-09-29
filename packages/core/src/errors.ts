@@ -6,11 +6,11 @@ import type { DiagnosticCode } from "./codes.ts";
 
 export type DiagnosticLocation = {
   /** Repo-relative source path when the diagnostic is about an authored file. */
-  path?: string;
-  line?: number;
-  column?: number;
+  path?: string | undefined;
+  line?: number | undefined;
+  column?: number | undefined;
   /** JSON Pointer into the parsed document. */
-  pointer?: string;
+  pointer?: string | undefined;
 };
 
 export class GroundingError extends Error {
