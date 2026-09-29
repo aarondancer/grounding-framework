@@ -330,10 +330,9 @@ describe("embeddings + lexical indexing (real postgres)", () => {
     // Per-run nonce: the embedding-content cache persists across test runs, so
     // semantic text must be unique for corpus A's first build to be a miss.
     const nonce = crypto.randomUUID().slice(0, 8);
-    const skillFile = FIXTURE["agent-assembly/skills/s.jsonc"].replaceAll(
-      '"semanticText":"x"',
-      `"semanticText":"x-${nonce}"`,
-    );
+    const skillSource = FIXTURE["agent-assembly/skills/s.jsonc"];
+    if (skillSource === undefined) throw new Error("fixture missing skill file");
+    const skillFile = skillSource.replaceAll('"semanticText":"x"', `"semanticText":"x-${nonce}"`);
     try {
       const a = corpus(
         {
