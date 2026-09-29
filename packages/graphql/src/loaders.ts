@@ -278,6 +278,26 @@ export function createLoaders(db: Database) {
       schema.promptFragmentConcepts.conceptId,
       schema.concepts,
     ),
+    // Backlink directions (spec/10 "used by"): link table keyed by the
+    // *referenced* entity, resolving the referencing entity.
+    templatesByFragmentId: joined(
+      schema.templatePromptFragments,
+      schema.templatePromptFragments.promptFragmentId,
+      schema.templatePromptFragments.templateId,
+      schema.agentTemplates,
+    ),
+    skillsByFragmentId: joined(
+      schema.skillPromptFragments,
+      schema.skillPromptFragments.promptFragmentId,
+      schema.skillPromptFragments.skillId,
+      schema.skills,
+    ),
+    skillsByToolId: joined(
+      schema.skillTools,
+      schema.skillTools.toolId,
+      schema.skillTools.skillId,
+      schema.skills,
+    ),
   };
 }
 

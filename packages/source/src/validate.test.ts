@@ -1,7 +1,6 @@
-import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { describe, expect, test } from "bun:test";
+import { join } from "node:path";
+import { writeCorpus } from "@grounding/test-support";
 import { loadSourceTree } from "./load.ts";
 import { validateTree } from "./validate.ts";
 
@@ -28,13 +27,12 @@ const FIXTURE: Record<string, string> = {
 };
 
 function buildTree(overrides: Record<string, string | null> = {}) {
-  const dir = mkdtempSync(join(tmpdir(), "grounding-test-"));
+  const files: Record<string, string> = {};
   for (const [rel, content] of Object.entries({ ...FIXTURE, ...overrides })) {
     if (content === null) continue;
-    const p = join(dir, rel);
-    mkdirSync(dirname(p), { recursive: true });
-    writeFileSync(p, content, "utf8");
+    files[rel] = content;
   }
+  const dir = writeCorpus("grounding-test-", files);
   const loaded = loadSourceTree(dir);
   const result = validateTree(
     {
@@ -48,16 +46,10 @@ function buildTree(overrides: Record<string, string | null> = {}) {
   return { dir, result };
 }
 
-const tmpDirs: string[] = [];
 function codes(overrides: Record<string, string | null> = {}): string[] {
-  const { dir, result } = buildTree(overrides);
-  tmpDirs.push(dir);
+  const { result } = buildTree(overrides);
   return result.diagnostics.map((d) => `${d.severity}:${d.code}`);
 }
-
-afterAll(() => {
-  for (const d of tmpDirs) rmSync(d, { recursive: true, force: true });
-});
 
 describe("baseline", () => {
   test("canonical fixture validates clean", () => {

@@ -12,8 +12,10 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "test": "bun test",
+    "test:integration": "bun run migrate && GROUNDING_REQUIRE_SERVICES=1 bun test",
     "typecheck": "bun run --filter='*' typecheck",
     "migrate": "bun run --filter='@grounding/db' migrate",
+    "eval": "bun apps/cli/src/index.ts eval",
     "compose:up": "docker compose -f ops/compose.yaml up -d",
     "compose:down": "docker compose -f ops/compose.yaml down",
     "prepare": "husky"
@@ -21,8 +23,8 @@
   "devDependencies": {
     "@biomejs/biome": "2.5.14",
     "bun-types": "1.4.2",
-    "husky": "^9.1.7",
-    "lint-staged": "^17.6.0",
+    "husky": "9.1.7",
+    "lint-staged": "17.6.0",
     "typescript": "7.0.2"
   },
   "packageManager": "bun@1.4.2"

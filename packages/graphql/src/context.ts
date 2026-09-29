@@ -25,6 +25,12 @@ export type ServiceLimits = {
    * ceil(first/50) — a `first: 200` list field costs 5.
    */
   maxCost?: number;
+  /**
+   * Per-request execution deadline in ms (spec/09 request timeouts). On
+   * expiry the response fails INTERNAL_ERROR; in-flight resolver work is
+   * not cancelled — it drains on the bounded pg pool.
+   */
+  requestTimeoutMs?: number;
 };
 
 export const DEFAULT_LIMITS: Required<ServiceLimits> = {
@@ -32,6 +38,7 @@ export const DEFAULT_LIMITS: Required<ServiceLimits> = {
   maxBudget: 100_000,
   maxDepth: 12,
   maxCost: 2000,
+  requestTimeoutMs: 30_000,
 };
 
 /**

@@ -1,9 +1,12 @@
-import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { build } from "@grounding/compiler";
+import { describe, expect } from "bun:test";
 import { deterministicProvider, type EmbeddingProvider } from "@grounding/embeddings";
+import {
+  ensureBuilt,
+  dbTest as it,
+  dbCacheTest as itCache,
+  makeTestServices as makeServices,
+  writeCorpus,
+} from "@grounding/test-support";
 
 const NS = "019f1000-0000-7000-8000-000000000001";
 
@@ -36,53 +39,7 @@ const FIXTURE: Record<string, string> = {
   "knowledge/other-item.md": `---\n{"id":"019f1000-0000-7000-8000-000000000057","key":"other-item","title":"Adjacent","status":"published","concepts":["other"]}\n---\n\n# Adjacent\n\nadjacent concept notes zzq\n`,
 };
 
-const tmpDirs: string[] = [];
-function corpus() {
-  const dir = mkdtempSync(join(tmpdir(), "grounding-retrieve-"));
-  tmpDirs.push(dir);
-  for (const [rel, raw] of Object.entries(FIXTURE)) {
-    const p = join(dir, rel);
-    mkdirSync(dirname(p), { recursive: true });
-    writeFileSync(p, raw, "utf8");
-  }
-  return dir;
-}
-
-afterAll(() => {
-  for (const d of tmpDirs) rmSync(d, { recursive: true, force: true });
-});
-
-const hasDb = Boolean(process.env.DATABASE_URL);
-const it = hasDb ? test : test.skip;
-const itCache = process.env.DATABASE_URL && process.env.VALKEY_ADDRESSES ? test : test.skip;
-
-async function makeServices(opts: { provider?: EmbeddingProvider | null; cache?: boolean }) {
-  const { connect } = await import("@grounding/db");
-  const conn = connect();
-  let cache = null;
-  if (opts.cache) {
-    const { cacheConfigFromEnv, createRuntimeCache } = await import("@grounding/cache");
-    cache = await createRuntimeCache(cacheConfigFromEnv());
-  }
-  const provider = opts.provider === undefined ? deterministicProvider(1536) : opts.provider;
-  return {
-    conn,
-    services: {
-      db: conn.db,
-      cache,
-      embedding: provider ? { provider, configHash: "test-deterministic" } : null,
-      environment: "local",
-    },
-  };
-}
-
-async function ensureBuilt(db: import("@grounding/db").Database, dir: string) {
-  const res = await build(dir, db, {
-    clean: true,
-    provider: deterministicProvider(1536),
-  });
-  if (!res.ok) throw new Error(`fixture build failed: ${JSON.stringify(res.diagnostics)}`);
-}
+const corpus = () => writeCorpus("grounding-retrieve-", FIXTURE);
 
 describe("retrieve (real postgres)", () => {
   it("full pipeline: channels, gates, selection, ordering, packing", async () => {

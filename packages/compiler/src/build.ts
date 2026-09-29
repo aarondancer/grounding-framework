@@ -66,6 +66,23 @@ function gitCommit(root: string): string | null {
   }
 }
 
+/**
+ * Repo-relative path of the grounding root ("" when the root is the repo
+ * root, e.g. "grounding/" when nested). Source paths are grounding-root
+ * relative; GitHub links need this prefix to reach the file in the repo.
+ */
+function gitRepoPrefix(root: string): string {
+  try {
+    return execSync("git rev-parse --show-prefix", {
+      cwd: root,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return "";
+  }
+}
+
 export async function build(
   root: string,
   db: Database,
@@ -132,11 +149,17 @@ export async function build(
     return { ok: true, diagnostics, plan, deploymentId: null, sourceHash: compiled.sourceHash };
   }
 
+  const repository = loaded.config?.repository;
   const provenance: BuildProvenance = {
     environment,
     gitCommit: gitCommit(root),
     sourceHash: compiled.sourceHash,
     embeddingConfigHash,
+    repository:
+      repository !== null && typeof repository === "object" && !Array.isArray(repository)
+        ? (repository as BuildProvenance["repository"])
+        : null,
+    repositoryPathPrefix: gitRepoPrefix(root),
   };
 
   // Semantic work: only entities whose semanticHash changed need fresh

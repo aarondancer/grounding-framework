@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect } from "bun:test";
+import { valkeyTest as it } from "@grounding/test-support";
 import { createRuntimeCache } from "./cache.ts";
 import { cacheConfigFromEnv } from "./config.ts";
 import { revisionedKey } from "./keys.ts";
@@ -8,9 +9,6 @@ import { revisionedKey } from "./keys.ts";
  * under Bun". Skipped when VALKEY_ADDRESSES is unset; CI always sets it.
  */
 describe("valkey connectivity", () => {
-  const configured = Boolean(process.env.VALKEY_ADDRESSES);
-  const it = configured ? test : test.skip;
-
   it("GLIDE connects, round-trips a value, and pings", async () => {
     const cache = await createRuntimeCache(cacheConfigFromEnv());
     try {

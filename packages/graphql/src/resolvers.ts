@@ -1,6 +1,15 @@
 import { type AssemblyServices, assembleAgent } from "@grounding/assembly";
-import { RuntimeErrorCode } from "@grounding/core";
-import { type Database, schema } from "@grounding/db";
+import {
+  type Diagnostic,
+  type Expression,
+  evaluateAuthorization,
+  evaluateExpression,
+  isEligible,
+  leafDimensions,
+  normalizeContext,
+  RuntimeErrorCode,
+} from "@grounding/core";
+import { type Database, loadDimensionRegistry, schema } from "@grounding/db";
 import {
   type RetrievalServices,
   resolveConceptsForNamespace,
@@ -13,7 +22,14 @@ import type { GraphQLContext } from "./context.ts";
 import { DEFAULT_LIMITS } from "./context.ts";
 import type * as Gql from "./generated/resolvers-types.ts";
 import { scopedKey } from "./loaders.ts";
-import { type Connection, gqlError, invalidInput, pageArgs, toConnection } from "./pagination.ts";
+import {
+  type Connection,
+  gqlError,
+  invalidInput,
+  pageArgs,
+  toConnection,
+  UUID_RE,
+} from "./pagination.ts";
 
 type Row = Record<string, unknown>;
 type Resolver<P, A, R> = (parent: P, args: A, ctx: GraphQLContext) => R | Promise<R>;
@@ -93,27 +109,104 @@ type RetrievalArgs = { input: Gql.RetrievalInput };
 type ConceptResolutionArgs = { input: Gql.ConceptResolutionInput };
 type AssemblyArgs = { input: Gql.AgentAssemblyInput };
 
-const upper = (v: unknown): string | null =>
+const upperEnum = (v: unknown): string | null =>
   v == null || v === "" ? null : String(v).toUpperCase();
 
-const sourceLoc = (row: { sourcePath?: unknown }) => ({
-  path: String(row.sourcePath ?? ""),
-  line: null,
-  repositoryUrl: null,
-  repositoryRef: null,
-  viewUrl: null,
-});
+/**
+ * Repository link metadata for `SourceLocation` (spec/10: exact GitHub
+ * source links when repository metadata permits). The build persists
+ * grounding.config.jsonc `repository` + the repo-relative prefix of the
+ * grounding root on the active deployment row.
+ */
+type RepoInfo = { provider: string; url: string; ref: string | null; prefix: string };
+const repoMemo = new WeakMap<GraphQLContext, Promise<RepoInfo | null>>();
+function repoInfo(ctx: GraphQLContext): Promise<RepoInfo | null> {
+  let p = repoMemo.get(ctx);
+  if (!p) {
+    p = (async () => {
+      const db = ctx.services.db;
+      if (!db) return null;
+      const ns = await defaultNamespace(ctx);
+      const states = await db
+        .select({
+          gitCommit: schema.namespaceRuntimeState.gitCommit,
+          metadata: schema.deployments.metadata,
+        })
+        .from(schema.namespaceRuntimeState)
+        .leftJoin(
+          schema.deployments,
+          eq(schema.deployments.id, schema.namespaceRuntimeState.activeDeploymentId),
+        )
+        .where(
+          and(
+            eq(schema.namespaceRuntimeState.namespaceId, ns.id),
+            eq(schema.namespaceRuntimeState.environment, ctx.services.environment),
+          ),
+        )
+        .limit(1);
+      const meta = states[0]?.metadata as
+        | {
+            repository?: { provider?: unknown; url?: unknown } | null;
+            repositoryPathPrefix?: unknown;
+          }
+        | null
+        | undefined;
+      const repo = meta?.repository;
+      if (!repo || typeof repo.url !== "string" || repo.url === "") return null;
+      return {
+        provider: String(repo.provider ?? ""),
+        url: repo.url,
+        ref: states[0]?.gitCommit ?? null,
+        prefix: typeof meta?.repositoryPathPrefix === "string" ? meta.repositoryPathPrefix : "",
+      };
+    })();
+    repoMemo.set(ctx, p);
+  }
+  return p;
+}
+
+const sourceLoc = async (
+  row: { sourcePath?: unknown; sourceLine?: unknown },
+  ctx: GraphQLContext,
+) => {
+  const path = String(row.sourcePath ?? "");
+  // Entity rows don't carry per-entity line positions (collection files hold
+  // many entities); line stays null until the compiler records them, and
+  // viewUrl only anchors a line when one exists (spec/10 file-level links).
+  const line =
+    typeof row.sourceLine === "number" && Number.isInteger(row.sourceLine) && row.sourceLine > 0
+      ? row.sourceLine
+      : null;
+  const info = await repoInfo(ctx);
+  let viewUrl: string | null = null;
+  if (info?.provider === "github" && path !== "") {
+    const base = info.url.replace(/\.git$/, "").replace(/\/+$/, "");
+    viewUrl = `${base}/blob/${info.ref ?? "HEAD"}/${info.prefix}${path}${line ? `#L${line}` : ""}`;
+  }
+  return {
+    path,
+    line,
+    repositoryUrl: info?.url ?? null,
+    repositoryRef: info?.ref ?? null,
+    viewUrl,
+  };
+};
 
 const metadataOf = (row: { metadata?: unknown }) => row.metadata ?? {};
 
 type RefInput = { id?: string | null; key?: string | null };
 
 /** spec/09: EntityRefInput requires exactly one of id/key. */
+
 function validateRef(ref: RefInput | null | undefined): asserts ref is RefInput {
   const hasId = typeof ref?.id === "string" && ref.id !== "";
   const hasKey = typeof ref?.key === "string" && ref.key !== "";
   if (hasId === hasKey) {
     throw invalidInput("entity ref requires exactly one of id or key");
+  }
+  // Malformed ids must fail as INVALID_INPUT, not a pg cast → INTERNAL_ERROR.
+  if (hasId && !UUID_RE.test(ref.id as string)) {
+    throw invalidInput("entity ref id must be a UUID");
   }
 }
 
@@ -176,7 +269,7 @@ function searchClause(search: string, ...cols: PgColumn[]): SQL {
   return sql`(${sql.join(parts, sql` or `)})`;
 }
 
-const lc = (v: unknown) => String(v).toLowerCase();
+const lowerCase = (v: unknown) => String(v).toLowerCase();
 
 async function groupId(ctx: GraphQLContext, key: string): Promise<string> {
   const ns = await defaultNamespace(ctx);
@@ -185,6 +278,91 @@ async function groupId(ctx: GraphQLContext, key: string): Promise<string> {
     throw gqlError(RuntimeErrorCode.ENTITY_NOT_FOUND, `selection group "${key}" does not exist`);
   }
   return g.id;
+}
+
+/** `concept:` browse filter — resolve a concept key to its id. */
+async function conceptIdFor(ctx: GraphQLContext, key: string): Promise<string> {
+  const ns = await defaultNamespace(ctx);
+  const c = await ctx.loaders.conceptByKey.load(scopedKey(ns.id, key));
+  if (!c) {
+    throw gqlError(RuntimeErrorCode.ENTITY_NOT_FOUND, `concept "${key}" does not exist`);
+  }
+  return c.id as string;
+}
+
+/** Gate tables that carry authorization/applicability expressions. */
+const GATED_TABLES = [
+  {
+    table: schema.knowledgeChunks,
+    keyCol: schema.knowledgeChunks.chunkKey,
+    type: "knowledge_chunk",
+  },
+  { table: schema.skills, keyCol: schema.skills.key, type: "skill" },
+  { table: schema.tools, keyCol: schema.tools.key, type: "tool" },
+  { table: schema.promptFragments, keyCol: schema.promptFragments.key, type: "prompt_fragment" },
+] as const;
+
+type GateUsage = { entity: { id: string; key: string; type: string }; kind: string };
+
+/**
+ * dimension key → gated entities referencing it (spec/10 "used by"). The
+ * whole map is built once per request — four scans cover every dimension,
+ * so per-dimension lookups stay flat regardless of list size.
+ */
+const usageMemo = new WeakMap<GraphQLContext, Promise<Map<string, GateUsage[]>>>();
+function dimensionUsageMap(ctx: GraphQLContext) {
+  let p = usageMemo.get(ctx);
+  if (!p) {
+    p = (async () => {
+      const db = requireDb(ctx);
+      const ns = await defaultNamespace(ctx);
+      const map = new Map<string, GateUsage[]>();
+      for (const g of GATED_TABLES) {
+        const rows = await db
+          .select({
+            id: g.table.id,
+            key: g.keyCol,
+            authorization: g.table.authorizationExpression,
+            applicability: g.table.applicabilityExpression,
+          })
+          .from(g.table)
+          .where(eq(g.table.namespaceId, ns.id));
+        for (const row of rows) {
+          const entity = { id: row.id, key: row.key, type: g.type };
+          for (const [col, kind] of [
+            ["authorization", "AUTHORIZATION"],
+            ["applicability", "APPLICABILITY"],
+          ] as const) {
+            const expr = row[col];
+            if (expr === null || typeof expr !== "object") continue;
+            for (const dim of new Set(leafDimensions(expr as Expression))) {
+              const list = map.get(dim) ?? [];
+              list.push({ entity, kind });
+              map.set(dim, list);
+            }
+          }
+        }
+      }
+      return map;
+    })();
+    usageMemo.set(ctx, p);
+  }
+  return p;
+}
+
+/**
+ * Gate-expression field resolver: service-produced parents (e.g. retrieval
+ * result chunks) omit the columns — fetch the full row lazily via loader.
+ */
+function gateField(
+  col: "authorizationExpression" | "applicabilityExpression",
+  load: (ctx: GraphQLContext, id: string) => Promise<Row | null | undefined>,
+): Resolver<Row, unknown, unknown> {
+  return async (p: Row, _a: unknown, ctx: GraphQLContext) => {
+    if (p[col] !== undefined) return p[col] ?? null;
+    const row = await load(ctx, p.id as string);
+    return row?.[col] ?? null;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -233,6 +411,18 @@ export function buildResolvers() {
       retrieve: (_p: unknown, a: RetrievalArgs, ctx: GraphQLContext) => {
         const input = a.input;
         const trusted = trustedOf(ctx);
+        // Filter id arrays flow into uuid-typed SQL predicates — validate
+        // here so malformed ids fail INVALID_INPUT, not a pg cast error.
+        for (const field of ["conceptIds", "domainIds", "knowledgeItemIds"] as const) {
+          const list = input.filters?.[field];
+          if (Array.isArray(list)) {
+            for (const v of list) {
+              if (typeof v !== "string" || !UUID_RE.test(v)) {
+                throw invalidInput(`filters.${field} must contain UUIDs`);
+              }
+            }
+          }
+        }
         return retrieve(serviceDeps(ctx), {
           ...(input.namespace ? { namespace: input.namespace } : {}),
           query: input.query,
@@ -311,7 +501,7 @@ export function buildResolvers() {
           schema.concepts,
           a.input,
           typeof input.status === "string"
-            ? eq(schema.concepts.status, lc(input.status))
+            ? eq(schema.concepts.status, lowerCase(input.status))
             : undefined,
           typeof input.type === "string" ? eq(schema.concepts.conceptType, input.type) : undefined,
           typeof input.search === "string" && input.search !== ""
@@ -349,7 +539,7 @@ export function buildResolvers() {
           schema.knowledgeItems,
           a.input,
           typeof input.status === "string"
-            ? eq(schema.knowledgeItems.status, lc(input.status))
+            ? eq(schema.knowledgeItems.status, lowerCase(input.status))
             : undefined,
           typeof input.search === "string" && input.search !== ""
             ? searchClause(input.search, schema.knowledgeItems.title, schema.knowledgeItems.key)
@@ -358,7 +548,7 @@ export function buildResolvers() {
             ? sql`${schema.knowledgeItems.id} in (select kc.knowledge_item_id from knowledge_chunks kc join chunk_concepts cc on cc.chunk_id = kc.id join concept_domains cd on cd.concept_id = cc.concept_id join domains d on d.id = cd.domain_id and d.namespace_id = cd.namespace_id where d.key = ${input.domain} and kc.namespace_id = ${ns.id})`
             : undefined,
           typeof input.concept === "string"
-            ? sql`${schema.knowledgeItems.id} in (select kc.knowledge_item_id from knowledge_chunks kc join chunk_concepts cc on cc.chunk_id = kc.id join concepts c on c.id = cc.concept_id where c.key = ${input.concept} and kc.namespace_id = ${ns.id})`
+            ? sql`${schema.knowledgeItems.id} in (select kc.knowledge_item_id from knowledge_chunks kc where kc.namespace_id = ${ns.id} and kc.id in (select chunk_id from chunk_concepts where concept_id = ${await conceptIdFor(ctx, input.concept)}))`
             : undefined,
         );
       },
@@ -379,7 +569,12 @@ export function buildResolvers() {
         if (hasId && (hasKey || hasItem)) {
           throw invalidInput("chunk ref: id cannot be combined with key/knowledgeItem");
         }
-        if (hasId) return ctx.loaders.chunkById.load(ref.id as string);
+        if (hasId) {
+          if (!UUID_RE.test(ref.id as string)) {
+            throw invalidInput("chunk ref id must be a UUID");
+          }
+          return ctx.loaders.chunkById.load(ref.id as string);
+        }
         if (!hasKey || !hasItem) {
           throw invalidInput("chunk ref requires id, or knowledgeItem + key");
         }
@@ -434,7 +629,7 @@ export function buildResolvers() {
             );
           relTypeIds = types.map((t) => t.id);
           if (relTypeIds.length === 0) {
-            return { center, concepts: [], relations: [] };
+            return { center, concepts: [], relations: [], chunks: [] };
           }
         }
 
@@ -524,14 +719,32 @@ export function buildResolvers() {
           concepts = concepts.filter((c) => keep.has(c.id as string));
         }
         const conceptIds = new Set(concepts.map((c) => c.id as string));
+        const visible = new Set([center.id as string, ...conceptIds]);
+        // Both endpoints must survive filtering — an edge to a dropped
+        // concept is a dangling reference the client can't render.
         const relations = [...edges.values()].filter(
           (e) =>
-            conceptIds.has(e.sourceConceptId as string) ||
-            conceptIds.has(e.targetConceptId as string) ||
-            e.sourceConceptId === center.id ||
-            e.targetConceptId === center.id,
+            visible.has(e.sourceConceptId as string) && visible.has(e.targetConceptId as string),
         );
-        return { center, concepts, relations };
+        // Chunks linked to any concept in the neighborhood (spec/10 "linked
+        // chunks" toggle) — one batched link-table query, not per-concept.
+        const allIds = [center.id as string, ...conceptIds];
+        const links = await db
+          .select({
+            chunkId: schema.chunkConcepts.chunkId,
+            conceptId: schema.chunkConcepts.conceptId,
+          })
+          .from(schema.chunkConcepts)
+          .where(inArray(schema.chunkConcepts.conceptId, allIds));
+        const chunkIds = [...new Set(links.map((l) => l.chunkId as string))];
+        const chunks =
+          chunkIds.length === 0
+            ? []
+            : await db
+                .select()
+                .from(schema.knowledgeChunks)
+                .where(inArray(schema.knowledgeChunks.id, chunkIds));
+        return { center, concepts, relations, chunks };
       },
 
       dimensions: async (_p: unknown, _a: unknown, ctx: GraphQLContext) => {
@@ -592,16 +805,30 @@ export function buildResolvers() {
 
       skills: async (_p: unknown, a: { input?: Row }, ctx: GraphQLContext) => {
         const input = a.input ?? {};
+        const db = requireDb(ctx);
         return paginate(
           ctx,
           schema.skills,
           a.input,
-          typeof input.status === "string" ? eq(schema.skills.status, lc(input.status)) : undefined,
+          typeof input.status === "string"
+            ? eq(schema.skills.status, lowerCase(input.status))
+            : undefined,
           typeof input.search === "string" && input.search !== ""
             ? searchClause(input.search, schema.skills.name, schema.skills.key)
             : undefined,
           typeof input.selectionGroup === "string"
             ? eq(schema.skills.selectionGroupId, await groupId(ctx, input.selectionGroup))
+            : undefined,
+          typeof input.concept === "string" && input.concept !== ""
+            ? inArray(
+                schema.skills.id,
+                db
+                  .select({ id: schema.skillConcepts.skillId })
+                  .from(schema.skillConcepts)
+                  .where(
+                    eq(schema.skillConcepts.conceptId, await conceptIdFor(ctx, input.concept)),
+                  ),
+              )
             : undefined,
         );
       },
@@ -616,16 +843,28 @@ export function buildResolvers() {
 
       tools: async (_p: unknown, a: { input?: Row }, ctx: GraphQLContext) => {
         const input = a.input ?? {};
+        const db = requireDb(ctx);
         return paginate(
           ctx,
           schema.tools,
           a.input,
-          typeof input.status === "string" ? eq(schema.tools.status, lc(input.status)) : undefined,
+          typeof input.status === "string"
+            ? eq(schema.tools.status, lowerCase(input.status))
+            : undefined,
           typeof input.search === "string" && input.search !== ""
             ? searchClause(input.search, schema.tools.name, schema.tools.key)
             : undefined,
           typeof input.selectionGroup === "string"
             ? eq(schema.tools.selectionGroupId, await groupId(ctx, input.selectionGroup))
+            : undefined,
+          typeof input.concept === "string" && input.concept !== ""
+            ? inArray(
+                schema.tools.id,
+                db
+                  .select({ id: schema.toolConcepts.toolId })
+                  .from(schema.toolConcepts)
+                  .where(eq(schema.toolConcepts.conceptId, await conceptIdFor(ctx, input.concept))),
+              )
             : undefined,
         );
       },
@@ -640,18 +879,33 @@ export function buildResolvers() {
 
       promptFragments: async (_p: unknown, a: { input?: Row }, ctx: GraphQLContext) => {
         const input = a.input ?? {};
+        const db = requireDb(ctx);
         return paginate(
           ctx,
           schema.promptFragments,
           a.input,
           typeof input.status === "string"
-            ? eq(schema.promptFragments.status, lc(input.status))
+            ? eq(schema.promptFragments.status, lowerCase(input.status))
             : undefined,
           typeof input.search === "string" && input.search !== ""
             ? searchClause(input.search, schema.promptFragments.name, schema.promptFragments.key)
             : undefined,
           typeof input.selectionGroup === "string"
             ? eq(schema.promptFragments.selectionGroupId, await groupId(ctx, input.selectionGroup))
+            : undefined,
+          typeof input.concept === "string" && input.concept !== ""
+            ? inArray(
+                schema.promptFragments.id,
+                db
+                  .select({ id: schema.promptFragmentConcepts.promptFragmentId })
+                  .from(schema.promptFragmentConcepts)
+                  .where(
+                    eq(
+                      schema.promptFragmentConcepts.conceptId,
+                      await conceptIdFor(ctx, input.concept),
+                    ),
+                  ),
+              )
             : undefined,
         );
       },
@@ -663,6 +917,103 @@ export function buildResolvers() {
           (id) => ctx.loaders.promptFragmentById.load(id),
           (k) => ctx.loaders.promptFragmentByKey.load(k),
         ),
+
+      simulateGates: async (
+        _p: unknown,
+        a: { input: Gql.GateSimulationInput },
+        ctx: GraphQLContext,
+      ) => {
+        const input = a.input;
+        validateRef(input.entity);
+        const db = requireDb(ctx);
+        const ns = await defaultNamespace(ctx);
+        // Keys aren't globally unique (chunk keys are per knowledge item; keys
+        // can collide across entity types) — gather all matches and fail on
+        // ambiguity rather than simulate an arbitrary one.
+        const matches: { type: string; row: Row }[] = [];
+        for (const g of GATED_TABLES) {
+          const pred = input.entity.id
+            ? and(eq(g.table.namespaceId, ns.id), eq(g.table.id, input.entity.id))
+            : and(eq(g.table.namespaceId, ns.id), eq(g.keyCol, input.entity.key as string));
+          const rows = await db.select().from(g.table).where(pred).limit(2);
+          for (const row of rows) matches.push({ type: g.type, row: row as unknown as Row });
+        }
+        if (matches.length > 1) {
+          throw invalidInput(
+            `entity ref matches ${matches.length} gated entities — disambiguate with id`,
+          );
+        }
+        const found = matches[0] ?? null;
+        if (!found) {
+          throw gqlError(
+            RuntimeErrorCode.ENTITY_NOT_FOUND,
+            "no gated entity (chunk, skill, tool, prompt fragment) matches that ref",
+          );
+        }
+        const registry = await loadDimensionRegistry(db, ns.id);
+        const trusted = trustedOf(ctx);
+        const normalized = normalizeContext(registry, {
+          caller: jsonContext(input.context),
+          ...(trusted !== undefined ? { trusted } : {}),
+        });
+        if (!normalized.context) {
+          // Attach the diagnostic list so toGraphQLError maps the primary
+          // registry code (UNKNOWN_CONTEXT_DIMENSION, CONTEXT_TYPE_MISMATCH…)
+          // instead of collapsing to INVALID_INPUT (spec/09, spec/14).
+          const err = new Error("request context failed validation") as Error & {
+            diagnostics?: Diagnostic[];
+          };
+          err.diagnostics = normalized.diagnostics;
+          throw err;
+        }
+        const warnings = (ds: Diagnostic[]) =>
+          ds.map((d) => ({ code: d.code, message: d.message, details: d.details ?? null }));
+        const authExpr = found.row.authorizationExpression;
+        const appExpr = found.row.applicabilityExpression;
+        return {
+          entity: {
+            id: found.row.id,
+            key: found.row.key ?? found.row.chunkKey,
+            type: found.type,
+          },
+          authorization:
+            authExpr === null || authExpr === undefined
+              ? null
+              : (() => {
+                  // evaluateAuthorization owns the fail-closed verdict;
+                  // evaluateExpression reports the normative quad state
+                  // (true/false/unknown/skip) the SDL documents.
+                  const verdict = evaluateAuthorization(
+                    registry,
+                    normalized.context,
+                    authExpr as Expression,
+                  );
+                  const quad = evaluateExpression(
+                    registry,
+                    normalized.context,
+                    authExpr as Expression,
+                  );
+                  return {
+                    state: quad.state.toUpperCase(),
+                    eligible: verdict.allowed,
+                    specificity: null,
+                    diagnostics: warnings(verdict.diagnostics),
+                  };
+                })(),
+          applicability:
+            appExpr === null || appExpr === undefined
+              ? null
+              : (() => {
+                  const r = evaluateExpression(registry, normalized.context, appExpr as Expression);
+                  return {
+                    state: r.state.toUpperCase(),
+                    eligible: isEligible(r),
+                    specificity: [r.specificity[0], r.specificity[1]],
+                    diagnostics: warnings(r.diagnostics),
+                  };
+                })(),
+        };
+      },
     },
 
     // ---------------------------------------------------------------------
@@ -679,7 +1030,7 @@ export function buildResolvers() {
 
     Concept: {
       type: (p: Row) => p.conceptType ?? null,
-      status: (p: Row) => upper(p.status),
+      status: (p: Row) => upperEnum(p.status),
       aliases: (p: Row, _a: unknown, ctx: GraphQLContext) =>
         ctx.loaders.aliasesByConceptId.load(p.id as string),
       domains: (p: Row, _a: unknown, ctx: GraphQLContext) =>
@@ -694,7 +1045,7 @@ export function buildResolvers() {
         const all = await ctx.loaders.relationsByTargetId.load(p.id as string);
         return filterRelations(all, a, limit, afterId, ctx);
       },
-      source: (p: Row) => sourceLoc(p),
+      source: (p: Row, _a: unknown, ctx: GraphQLContext) => sourceLoc(p, ctx),
       metadata: metadataOf,
     },
 
@@ -721,7 +1072,7 @@ export function buildResolvers() {
         ]);
         return toConnection(rows, limit, total[0]?.n ?? null);
       },
-      source: (p: Row) => sourceLoc(p),
+      source: (p: Row, _a: unknown, ctx: GraphQLContext) => sourceLoc(p, ctx),
       metadata: metadataOf,
     },
 
@@ -732,11 +1083,11 @@ export function buildResolvers() {
         ctx.loaders.conceptById.load(p.sourceConceptId as string),
       targetConcept: async (p: Row, _a: unknown, ctx: GraphQLContext) =>
         ctx.loaders.conceptById.load(p.targetConceptId as string),
-      source: (p: Row) => sourceLoc(p),
+      source: (p: Row, _a: unknown, ctx: GraphQLContext) => sourceLoc(p, ctx),
     },
 
     KnowledgeItem: {
-      status: (p: Row) => upper(p.status),
+      status: (p: Row) => upperEnum(p.status),
       sourceReference: (p: Row, _a: unknown, ctx: GraphQLContext) =>
         p.sourceId ? ctx.loaders.knowledgeSourceById.load(p.sourceId as string) : null,
       chunks: async (p: Row, a: Row, ctx: GraphQLContext) => {
@@ -758,7 +1109,7 @@ export function buildResolvers() {
         ]);
         return toConnection(rows, limit, total[0]?.n ?? null);
       },
-      source: (p: Row) => sourceLoc(p),
+      source: (p: Row, _a: unknown, ctx: GraphQLContext) => sourceLoc(p, ctx),
       metadata: metadataOf,
     },
 
@@ -769,7 +1120,7 @@ export function buildResolvers() {
 
     KnowledgeChunk: {
       key: (p: Row) => p.chunkKey ?? p.key,
-      status: (p: Row) => upper(p.status),
+      status: (p: Row) => upperEnum(p.status),
       concepts: (p: Row, _a: unknown, ctx: GraphQLContext) =>
         ctx.loaders.conceptsByChunkId.load(p.id as string),
       knowledgeItem: (p: Row, _a: unknown, ctx: GraphQLContext) =>
@@ -778,11 +1129,17 @@ export function buildResolvers() {
         p.selectionGroupId
           ? ctx.loaders.selectionGroupById.load(p.selectionGroupId as string)
           : null,
+      authorization: gateField("authorizationExpression", (ctx, id) =>
+        ctx.loaders.chunkById.load(id),
+      ),
+      applicability: gateField("applicabilityExpression", (ctx, id) =>
+        ctx.loaders.chunkById.load(id),
+      ),
       // Service ChunkRows omit sourcePath/metadata — fetch the full row lazily.
       source: async (p: Row, _a: unknown, ctx: GraphQLContext) => {
-        if (p.sourcePath !== undefined) return sourceLoc(p);
+        if (p.sourcePath !== undefined) return sourceLoc(p, ctx);
         const row = await ctx.loaders.chunkById.load(p.id as string);
-        return sourceLoc(row ?? {});
+        return sourceLoc(row ?? {}, ctx);
       },
       metadata: async (p: Row, _a: unknown, ctx: GraphQLContext) => {
         if (p.metadata !== undefined) return p.metadata ?? {};
@@ -811,7 +1168,9 @@ export function buildResolvers() {
         ]);
         return toConnection(rows, limit, total[0]?.n ?? null);
       },
-      source: (p: Row) => sourceLoc(p),
+      usedBy: async (p: Row, _a: unknown, ctx: GraphQLContext) =>
+        (await dimensionUsageMap(ctx)).get(p.key as string) ?? [],
+      source: (p: Row, _a: unknown, ctx: GraphQLContext) => sourceLoc(p, ctx),
     },
 
     DimensionValue: {
@@ -823,35 +1182,23 @@ export function buildResolvers() {
     },
 
     SelectionGroup: {
-      mode: (p: Row) => upper(p.mode),
+      mode: (p: Row) => upperEnum(p.mode),
       members: async (p: Row, _a: unknown, ctx: GraphQLContext) => {
-        const id = p.id as string;
-        switch (p.entityType) {
-          case "knowledge_chunk":
-            return (await ctx.loaders.chunksByGroupId.load(id)).map((r) => ({
-              ...r,
-              __typename: "KnowledgeChunk",
-            }));
-          case "skill":
-            return (await ctx.loaders.skillsByGroupId.load(id)).map((r) => ({
-              ...r,
-              __typename: "Skill",
-            }));
-          case "tool":
-            return (await ctx.loaders.toolsByGroupId.load(id)).map((r) => ({
-              ...r,
-              __typename: "Tool",
-            }));
-          case "prompt_fragment":
-            return (await ctx.loaders.fragmentsByGroupId.load(id)).map((r) => ({
-              ...r,
-              __typename: "PromptFragment",
-            }));
-          default:
-            return [];
-        }
+        const table = {
+          knowledge_chunk: ["chunksByGroupId", "KnowledgeChunk"],
+          skill: ["skillsByGroupId", "Skill"],
+          tool: ["toolsByGroupId", "Tool"],
+          prompt_fragment: ["fragmentsByGroupId", "PromptFragment"],
+        } as const;
+        const entry = table[p.entityType as keyof typeof table];
+        if (!entry) return [];
+        const [loader, typename] = entry;
+        const rows = (await (ctx.loaders[loader] as { load: (id: string) => Promise<Row[]> }).load(
+          p.id as string,
+        )) as Row[];
+        return rows.map((r) => ({ ...r, __typename: typename }));
       },
-      source: (p: Row) => sourceLoc(p),
+      source: (p: Row, _a: unknown, ctx: GraphQLContext) => sourceLoc(p, ctx),
     },
 
     SelectionGroupMember: {
@@ -860,11 +1207,11 @@ export function buildResolvers() {
 
     RetrievalProfile: {
       config: (p: Row) => p.config ?? {},
-      source: (p: Row) => sourceLoc(p),
+      source: (p: Row, _a: unknown, ctx: GraphQLContext) => sourceLoc(p, ctx),
     },
 
     AgentTemplate: {
-      status: (p: Row) => upper(p.status),
+      status: (p: Row) => upperEnum(p.status),
       retrievalProfile: (p: Row, _a: unknown, ctx: GraphQLContext) =>
         p.retrievalProfileId
           ? ctx.loaders.retrievalProfileById.load(p.retrievalProfileId as string)
@@ -877,12 +1224,12 @@ export function buildResolvers() {
       }),
       promptFragments: (p: Row, _a: unknown, ctx: GraphQLContext) =>
         ctx.loaders.fragmentsByTemplateId.load(p.id as string),
-      source: (p: Row) => sourceLoc(p),
+      source: (p: Row, _a: unknown, ctx: GraphQLContext) => sourceLoc(p, ctx),
       metadata: metadataOf,
     },
 
     Skill: {
-      status: (p: Row) => upper(p.status),
+      status: (p: Row) => upperEnum(p.status),
       selectionGroup: (p: Row, _a: unknown, ctx: GraphQLContext) =>
         p.selectionGroupId
           ? ctx.loaders.selectionGroupById.load(p.selectionGroupId as string)
@@ -893,14 +1240,20 @@ export function buildResolvers() {
         ctx.loaders.fragmentsBySkillId.load(p.id as string),
       tools: (p: Row, _a: unknown, ctx: GraphQLContext) =>
         ctx.loaders.toolsBySkillId.load(p.id as string),
-      source: (p: Row) => sourceLoc(p),
+      authorization: gateField("authorizationExpression", (ctx, id) =>
+        ctx.loaders.skillById.load(id),
+      ),
+      applicability: gateField("applicabilityExpression", (ctx, id) =>
+        ctx.loaders.skillById.load(id),
+      ),
+      source: (p: Row, _a: unknown, ctx: GraphQLContext) => sourceLoc(p, ctx),
       metadata: metadataOf,
     },
 
     Tool: {
-      status: (p: Row) => upper(p.status),
-      risk: (p: Row) => upper(p.risk),
-      latency: (p: Row) => upper(p.latency),
+      status: (p: Row) => upperEnum(p.status),
+      risk: (p: Row) => upperEnum(p.risk),
+      latency: (p: Row) => upperEnum(p.latency),
       selectionGroup: (p: Row, _a: unknown, ctx: GraphQLContext) =>
         p.selectionGroupId
           ? ctx.loaders.selectionGroupById.load(p.selectionGroupId as string)
@@ -911,12 +1264,24 @@ export function buildResolvers() {
         ctx.loaders.depsBySourceToolId.load(p.id as string),
       dependents: (p: Row, _a: unknown, ctx: GraphQLContext) =>
         ctx.loaders.depsByTargetToolId.load(p.id as string),
-      source: (p: Row) => sourceLoc(p),
+      usedBy: async (p: Row, _a: unknown, ctx: GraphQLContext) =>
+        (await ctx.loaders.skillsByToolId.load(p.id as string)).map((s) => ({
+          id: s.id,
+          key: s.key,
+          type: "skill",
+        })),
+      authorization: gateField("authorizationExpression", (ctx, id) =>
+        ctx.loaders.toolById.load(id),
+      ),
+      applicability: gateField("applicabilityExpression", (ctx, id) =>
+        ctx.loaders.toolById.load(id),
+      ),
+      source: (p: Row, _a: unknown, ctx: GraphQLContext) => sourceLoc(p, ctx),
       metadata: metadataOf,
     },
 
     ToolDependency: {
-      requirement: (p: Row) => upper(p.requirement),
+      requirement: (p: Row) => upperEnum(p.requirement),
       sourceTool: (p: Row, _a: unknown, ctx: GraphQLContext) =>
         ctx.loaders.toolById.load(p.sourceToolId as string),
       targetTool: (p: Row, _a: unknown, ctx: GraphQLContext) =>
@@ -924,8 +1289,8 @@ export function buildResolvers() {
     },
 
     PromptFragment: {
-      status: (p: Row) => upper(p.status),
-      inclusionMode: (p: Row) => upper(p.inclusionMode),
+      status: (p: Row) => upperEnum(p.status),
+      inclusionMode: (p: Row) => upperEnum(p.inclusionMode),
       order: (p: Row) => p.orderHint ?? 0,
       concepts: (p: Row, _a: unknown, ctx: GraphQLContext) =>
         ctx.loaders.conceptsByFragmentId.load(p.id as string),
@@ -933,7 +1298,23 @@ export function buildResolvers() {
         p.selectionGroupId
           ? ctx.loaders.selectionGroupById.load(p.selectionGroupId as string)
           : null,
-      source: (p: Row) => sourceLoc(p),
+      authorization: gateField("authorizationExpression", (ctx, id) =>
+        ctx.loaders.promptFragmentById.load(id),
+      ),
+      applicability: gateField("applicabilityExpression", (ctx, id) =>
+        ctx.loaders.promptFragmentById.load(id),
+      ),
+      usedBy: async (p: Row, _a: unknown, ctx: GraphQLContext) => {
+        const [templates, skills] = await Promise.all([
+          ctx.loaders.templatesByFragmentId.load(p.id as string),
+          ctx.loaders.skillsByFragmentId.load(p.id as string),
+        ]);
+        return [
+          ...templates.map((t) => ({ id: t.id, key: t.key, type: "agent_template" })),
+          ...skills.map((s) => ({ id: s.id, key: s.key, type: "skill" })),
+        ];
+      },
+      source: (p: Row, _a: unknown, ctx: GraphQLContext) => sourceLoc(p, ctx),
       metadata: metadataOf,
     },
 
@@ -972,7 +1353,7 @@ export function buildResolvers() {
         ctx.loaders.relationTypeByKey.load(
           scopedKey(s.__ns as string, (s.relation as { key: string }).key),
         ),
-      direction: (s: Row) => upper(s.direction),
+      direction: (s: Row) => upperEnum(s.direction),
       from: (s: Row, _a: unknown, ctx: GraphQLContext) =>
         ctx.loaders.conceptById.load((s.from as { id: string }).id),
       to: (s: Row, _a: unknown, ctx: GraphQLContext) =>
@@ -980,10 +1361,12 @@ export function buildResolvers() {
     },
 
     RetrievalExclusion: {
-      // Service already redacts denied identity; blank refs carry "".
+      // Service already redacts denied identity; blank refs ("") mean the
+      // caller can't see this chunk — surface null so clients render the
+      // exclusion as redacted rather than linking a dead ref (spec/09).
       chunk: (p: Row) => {
         const c = p.chunk as { id?: string; key?: string } | null;
-        if (!c) return null;
+        if (!c || (!c.id && !c.key)) return null;
         return { id: c.id ?? "", key: c.key ?? "", type: "knowledge_chunk" };
       },
     },
@@ -1008,7 +1391,24 @@ export function buildResolvers() {
         ctx.loaders.promptFragmentById.load(p.fragment.id),
     },
 
+    RetrievalDiagnostics: {
+      // Error-severity gate-evaluation diagnostics (SDL `errors`) are
+      // collected internally under `diagnosticsErrors`.
+      errors: (p: Row) =>
+        ((p.diagnosticsErrors as Diagnostic[] | undefined) ?? []).map((d) => ({
+          code: d.code,
+          message: d.message,
+          details: d.details ?? null,
+        })),
+    },
+
     AgentAssemblyDiagnostics: {
+      errors: (p: Row) =>
+        ((p.diagnosticsErrors as Diagnostic[] | undefined) ?? []).map((d) => ({
+          code: d.code,
+          message: d.message,
+          details: d.details ?? null,
+        })),
       dependencyResolutions: async (p: Row, _a: unknown, ctx: GraphQLContext) => {
         const res = p.dependencyResolutions as {
           sourceTool: { id: string; key: string };
@@ -1035,8 +1435,8 @@ export function buildResolvers() {
     ToolDependencyResolution: {
       sourceTool: (p: Row) => p.__source,
       targetTool: (p: Row) => p.__target,
-      requirement: (p: Row) => upper(p.requirement),
-      status: (p: Row) => upper(p.status),
+      requirement: (p: Row) => upperEnum(p.requirement),
+      status: (p: Row) => upperEnum(p.status),
     },
   };
 }

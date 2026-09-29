@@ -17,5 +17,8 @@
     "unified": "11.0.5",
     "remark-parse": "11.0.0",
     "ajv-formats": "3.0.1"
+  },
+  "devDependencies": {
+    "@grounding/test-support": "workspace:*"
   }
 }

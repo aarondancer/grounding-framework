@@ -117,6 +117,13 @@ export type BuildProvenance = {
   gitCommit: string | null;
   sourceHash: string;
   embeddingConfigHash: string;
+  /**
+   * `repository` block from grounding.config.jsonc (spec/02) — persisted on
+   * the deployment so the API can build exact Git source links (spec/10).
+   */
+  repository?: { provider?: unknown; url?: unknown } | null | undefined;
+  /** Repo-relative prefix of the grounding root (`git rev-parse --show-prefix`). */
+  repositoryPathPrefix?: string | undefined;
 };
 
 /** semantic_entities row (spec/08) — embedding computed outside the tx. */
@@ -300,6 +307,10 @@ export async function applyPlan(
       schemaVersion: SCHEMA_VERSION,
       status: "active",
       completedAt: new Date(),
+      metadata: {
+        repository: provenance.repository ?? null,
+        repositoryPathPrefix: provenance.repositoryPathPrefix ?? "",
+      },
     });
     await tx
       .insert(t.namespaceRuntimeState)

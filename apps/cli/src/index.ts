@@ -1,11 +1,29 @@
 #!/usr/bin/env bun
 import { execSync } from "node:child_process";
-import { isAbsolute, relative } from "node:path";
+import { readFileSync } from "node:fs";
+import { isAbsolute, join, relative } from "node:path";
 import { cacheConfigFromEnv, createRuntimeCache } from "@grounding/cache";
 import { build, readManifest } from "@grounding/compiler";
 import { type Diagnostic, RuntimeErrorCode } from "@grounding/core";
 import { connect } from "@grounding/db";
-import { findGroundingRoot, loadSourceTree, validateTree } from "@grounding/source";
+import { type EmbeddingConfig, resolveEmbeddingRuntime } from "@grounding/embeddings";
+import {
+  BACKEND_NAMES,
+  type BackendName,
+  createBackend,
+  type Effort,
+  loadEvalConfig,
+  loadEvalFiles,
+  runAgentEval,
+  runEvalFiles,
+} from "@grounding/evals";
+import {
+  findGroundingRoot,
+  GROUNDING_CONFIG_NAME,
+  loadSourceTree,
+  parseJsonc,
+  validateTree,
+} from "@grounding/source";
 import { watch } from "chokidar";
 import { Command } from "commander";
 
@@ -315,6 +333,131 @@ async function runDev(): Promise<void> {
   });
 }
 
+type EvalOpts = {
+  kind: string;
+  build: boolean;
+  namespace?: string;
+  backend?: string;
+  judge?: string;
+  model?: string;
+  effort?: string;
+  format: string;
+};
+
+/** Shared embedding resolution (packages/embeddings) keeps the query-time
+ * configHash identical to `grounding build` (spec/16). */
+function resolveEvalEmbedding(root: string) {
+  try {
+    const parsed = parseJsonc(readFileSync(join(root, GROUNDING_CONFIG_NAME), "utf8"), "config");
+    const config = ((parsed.value as { embedding?: EmbeddingConfig })?.embedding ??
+      {}) as EmbeddingConfig;
+    return resolveEmbeddingRuntime(config);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * `grounding eval` — local-only (docs/testing; not run in CI). Deterministic
+ * evals execute the real retrieval/assembly services; --kind agent hands the
+ * assembled prompt to a CLI agent backend, optionally graded by --judge.
+ */
+async function runEval(opts: EvalOpts): Promise<number> {
+  const root = findGroundingRoot(process.cwd());
+  if (!root) {
+    console.error(`error: no grounding.config.jsonc found walking up from ${process.cwd()}`);
+    return 1;
+  }
+  const { pool, db } = connect();
+  const cache = await createRuntimeCache(cacheConfigFromEnv()).catch(() => null);
+  try {
+    if (opts.build) {
+      const b = await build(root, db, { cache });
+      if (!b.ok) {
+        printDiagnostics(b.diagnostics);
+        console.error("eval: build failed");
+        return 1;
+      }
+    }
+    const { files, diagnostics } = loadEvalFiles(root);
+    printDiagnostics(diagnostics);
+    const services = {
+      db,
+      cache,
+      embedding: resolveEvalEmbedding(root),
+      environment: process.env.GROUNDING_ENV ?? "local",
+    };
+    const json = opts.format === "json";
+    const output: Record<string, unknown> = { loadDiagnostics: diagnostics };
+    let failed = 0;
+
+    if (opts.kind !== "agent") {
+      const subset =
+        opts.kind === "all" ? files : files.filter((f) => f.kind === `${opts.kind}-eval`);
+      const report = await runEvalFiles(services, subset, {
+        ...(opts.namespace !== undefined ? { namespace: opts.namespace } : {}),
+      });
+      output.deterministic = report;
+      failed += report.failed;
+      if (!json) {
+        for (const r of report.results) {
+          console.error(`  ${r.ok ? "PASS" : "FAIL"} ${r.kind} ${r.name} (${r.path})`);
+          for (const f of r.failures) {
+            console.error(`       ${f.assertion}: expected ${JSON.stringify(f.expected)}`);
+          }
+          if (r.error) console.error(`       error: ${r.error}`);
+        }
+        console.error(`eval: ${report.passed} passed, ${report.failed} failed`);
+      }
+    }
+
+    if (opts.kind === "agent") {
+      const cfg = loadEvalConfig(root);
+      const backendName = (opts.backend ?? cfg.agent ?? "codex") as BackendName;
+      if (!BACKEND_NAMES.includes(backendName)) {
+        console.error(`error: --backend must be one of ${BACKEND_NAMES.join("|")}`);
+        return 2;
+      }
+      const agent = createBackend(backendName, cfg);
+      const doctor = await agent.doctor();
+      if (!doctor.ok) {
+        console.error(`eval: ${backendName} backend unavailable (${doctor.detail})`);
+        return 2;
+      }
+      const judge = opts.judge ? createBackend(opts.judge as BackendName, cfg) : undefined;
+      const results = [];
+      for (const f of files) {
+        if (f.kind !== "assembly-eval") continue;
+        const r = await runAgentEval(services, agent, f.def, {
+          ...(opts.namespace !== undefined ? { namespace: opts.namespace } : {}),
+          ...(opts.model !== undefined ? { model: opts.model } : {}),
+          ...(opts.effort !== undefined ? { effort: opts.effort as Effort } : {}),
+          ...(judge !== undefined ? { judge } : {}),
+        });
+        results.push(r);
+        if (!r.ok) failed++;
+        if (!json) {
+          console.error(
+            `  ${r.ok ? "PASS" : "FAIL"} agent(${r.backend}) ${r.name}${r.verdict ? ` verdict:${r.verdict.pass ? "pass" : "fail"}` : ""}`,
+          );
+          if (r.error) console.error(`       error: ${r.error}`);
+          for (const reason of r.verdict?.reasons ?? []) {
+            console.error(`       judge: ${reason}`);
+          }
+        }
+      }
+      output.agent = results;
+      if (!json) console.error(`eval: ${results.filter((r) => r.ok).length} agent run(s) passed`);
+    }
+
+    if (json) process.stdout.write(`${JSON.stringify(output)}\n`);
+    return failed > 0 ? 1 : 0;
+  } finally {
+    await cache?.close();
+    await pool.end();
+  }
+}
+
 export function createCli(): Command {
   const program = new Command();
   program.name("grounding").description("Grounding platform source tooling").version("0.0.0");
@@ -360,6 +503,41 @@ export function createCli(): Command {
     .description("Watch source and rebuild incrementally")
     .action(async () => {
       await runDev();
+    });
+
+  program
+    .command("eval")
+    .description("Run evals (local only — deterministic + optional agent backends)")
+    .option(
+      "--kind <kind>",
+      "all|retrieval|assembly|agent (agent runs assembled prompts via a CLI backend)",
+      "all",
+    )
+    .option("--no-build", "skip the materialization step")
+    .option("--namespace <key>", "namespace key when ambiguous")
+    .option("--backend <name>", `agent backend: ${BACKEND_NAMES.join("|")}`)
+    .option("--judge <name>", `judge backend: ${BACKEND_NAMES.join("|")}`)
+    .option("--model <model>", "backend model override")
+    .option("--effort <effort>", "reasoning effort: low|medium|high")
+    .option("--format <format>", "output format: human|json", "human")
+    .action(async (opts: EvalOpts) => {
+      const kinds = ["all", "retrieval", "assembly", "agent"];
+      if (!kinds.includes(opts.kind)) {
+        console.error(`error: --kind must be ${kinds.join("|")}`);
+        process.exitCode = 2;
+        return;
+      }
+      if (opts.effort && !["low", "medium", "high"].includes(opts.effort)) {
+        console.error("error: --effort must be low|medium|high");
+        process.exitCode = 2;
+        return;
+      }
+      if (opts.format !== "human" && opts.format !== "json") {
+        console.error("error: --format must be human|json");
+        process.exitCode = 2;
+        return;
+      }
+      process.exitCode = await runEval(opts);
     });
 
   return program;

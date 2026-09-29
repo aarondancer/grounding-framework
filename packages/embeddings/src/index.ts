@@ -7,7 +7,7 @@ import {
   NoopCacheMetrics,
   type RuntimeCache,
 } from "@grounding/cache";
-import { type Diagnostic, RuntimeErrorCode } from "@grounding/core";
+import { type Diagnostic, hashObject, RuntimeErrorCode } from "@grounding/core";
 
 /**
  * Embedding providers (spec/15 open decision, spec/16 cache contract).
@@ -226,4 +226,27 @@ export class CachedEmbedder {
   private keyFor(semanticHash: string) {
     return contentKey(ContentCacheKind.EMBEDDING_CONTENT, this.configHash, semanticHash);
   }
+}
+
+/**
+ * Resolve the runtime embedding provider + cache config hash for a parsed
+ * `grounding.config.jsonc` `embedding` block. Shared by the server app and
+ * the eval CLI so `configHash` keys the embedding-content cache identically
+ * everywhere (spec/16). Returns null when the provider can't be resolved —
+ * the vector channel then degrades (spec/05).
+ */
+export function resolveEmbeddingRuntime(
+  config: EmbeddingConfig | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+): { provider: EmbeddingProvider; configHash: string } | null {
+  const resolved = resolveProvider(config ?? {}, env);
+  if (!("embed" in resolved)) return null;
+  return {
+    provider: resolved,
+    configHash: hashObject({
+      provider: resolved.provider,
+      model: resolved.model,
+      dimensions: resolved.dimensions,
+    }),
+  };
 }

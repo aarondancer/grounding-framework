@@ -85,13 +85,50 @@ export function depthCostRule(maxDepth: number, maxCost: number, worstFirst = 20
   });
 }
 
-/** Envelop plugins enforcing service limits at validation time. */
+/**
+ * Race `run` against a wall-clock deadline (spec/09 request timeouts). On
+ * expiry rejects with a GraphQLError carrying INTERNAL_ERROR — the closed
+ * spec/14 registry has no timeout code and a server-side deadline is an
+ * internal condition, not caller input failure.
+ */
+export async function withTimeout<T>(run: () => Promise<T> | T, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(run),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              new GraphQLError(`request timeout after ${ms}ms`, {
+                extensions: { code: RuntimeErrorCode.INTERNAL_ERROR },
+              }),
+            ),
+          ms,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Envelop plugins enforcing service limits (spec/09). */
 export function securityPlugins(limits?: ServiceLimits): Plugin[] {
   const merged = { ...DEFAULT_LIMITS, ...limits };
   return [
     {
       onValidate({ addValidationRule }) {
         addValidationRule(depthCostRule(merged.maxDepth, merged.maxCost, merged.maxPageSize));
+      },
+    },
+    {
+      // Wraps execution in the request deadline; the losing branch keeps
+      // running on the server but its result is discarded.
+      onExecute({ executeFn, setExecuteFn }) {
+        setExecuteFn(
+          (args) => withTimeout(() => executeFn(args), merged.requestTimeoutMs) as never,
+        );
       },
     },
   ];

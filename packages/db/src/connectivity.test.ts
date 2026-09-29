@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect } from "bun:test";
+import { dbTest as it } from "@grounding/test-support";
 import { connect } from "./client.ts";
 
 /**
@@ -6,9 +7,6 @@ import { connect } from "./client.ts";
  * rule). Skipped when DATABASE_URL is unset; CI always sets it.
  */
 describe("postgres connectivity", () => {
-  const url = process.env.DATABASE_URL;
-  const it = url ? test : test.skip;
-
   it("connects and has the required extensions", async () => {
     const { db, pool } = connect();
     try {

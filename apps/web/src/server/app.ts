@@ -1,12 +1,11 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { cacheConfigFromEnv, createRuntimeCache, type RuntimeCache } from "@grounding/cache";
-import { hashObject } from "@grounding/core";
 import { connect, type Database } from "@grounding/db";
 import {
   type EmbeddingConfig,
   type EmbeddingProvider,
-  resolveProvider,
+  resolveEmbeddingRuntime,
 } from "@grounding/embeddings";
 import { createServerApp } from "@grounding/server";
 import { findGroundingRoot, GROUNDING_CONFIG_NAME, parseJsonc } from "@grounding/source";
@@ -30,21 +29,17 @@ function resolveEmbedding(): { provider: EmbeddingProvider; configHash: string }
   let config: EmbeddingConfig;
   try {
     const parsed = parseJsonc(readFileSync(join(root, GROUNDING_CONFIG_NAME), "utf8"), "config");
-    config = ((parsed.value as { embedding?: EmbeddingConfig })?.embedding ??
-      {}) as EmbeddingConfig;
+    if (parsed.diagnostics.some((d) => d.severity === "error")) return null;
+    const v = parsed.value;
+    config =
+      v && typeof v === "object" && "embedding" in v
+        ? ((v as Record<string, unknown>).embedding as EmbeddingConfig)
+        : {};
   } catch {
     return null;
   }
-  const resolved = resolveProvider(config, process.env);
-  if (!("embed" in resolved)) return null; // provider unavailable → degrade
-  return {
-    provider: resolved,
-    configHash: hashObject({
-      provider: resolved.provider,
-      model: resolved.model,
-      dimensions: resolved.dimensions,
-    }),
-  };
+  // Shared resolver keeps configHash identical to `grounding build` (spec/16).
+  return resolveEmbeddingRuntime(config);
 }
 
 export async function getServerApp() {

@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect } from "bun:test";
+import { dbTest as it } from "@grounding/test-support";
 
 /**
  * Real-PostgreSQL registry load: requires the canonical example corpus to be
@@ -6,8 +7,6 @@ import { describe, expect, test } from "bun:test";
  * canonical corpus authors hierarchical `regions` (US → US-TX), server-trusted
  * `permissions`, and flat enum `products`.
  */
-const it = process.env.DATABASE_URL ? test : test.skip;
-
 const CANONICAL_NS = "019d0000-0000-7000-8000-000000000001";
 
 describe("dimension registry (real postgres)", () => {

@@ -22,7 +22,8 @@ export function encodeCursor(id: string): string {
   return Buffer.from(`${PREFIX}${id}`, "utf8").toString("base64");
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** UUID shape check — rejects malformed ids before they reach pg casts. */
+export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function decodeCursor(after: string): string {
   let raw: string;

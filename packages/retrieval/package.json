@@ -16,5 +16,8 @@
     "@grounding/compiler": "workspace:*",
     "@grounding/embeddings": "workspace:*",
     "drizzle-orm": "0.45.3"
+  },
+  "devDependencies": {
+    "@grounding/test-support": "workspace:*"
   }
 }

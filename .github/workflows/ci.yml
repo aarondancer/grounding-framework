@@ -53,6 +53,8 @@ jobs:
           VALKEY_ADDRESSES: localhost:6379
           VALKEY_MODE: standalone
           GROUNDING_ENV: local
+          # Missing services must fail, not silently skip (docs/testing).
+          GROUNDING_REQUIRE_SERVICES: "1"
 
       - name: Production build
         run: bun run --filter='@grounding/web' build

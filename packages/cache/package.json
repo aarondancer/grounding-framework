@@ -12,5 +12,8 @@
   "dependencies": {
     "@grounding/core": "workspace:*",
     "@valkey/valkey-glide": "2.5.3"
+  },
+  "devDependencies": {
+    "@grounding/test-support": "workspace:*"
   }
 }

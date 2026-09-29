@@ -38,6 +38,7 @@ export type AgentAssemblyDiagnostics = {
   __typename?: 'AgentAssemblyDiagnostics';
   bootstrapRetrieval?: Maybe<RetrievalDiagnostics>;
   dependencyResolutions: Array<ToolDependencyResolution>;
+  errors: Array<DiagnosticWarning>;
   fragmentCandidates: Array<AssemblyCandidateDiagnostic>;
   skillCandidates: Array<AssemblyCandidateDiagnostic>;
   timings: Array<StageTiming>;
@@ -273,6 +274,7 @@ export type DimensionDefinition = {
   required: Scalars['Boolean']['output'];
   source: SourceLocation;
   trust: Scalars['String']['output'];
+  usedBy: Array<DimensionUsage>;
   valueType: Scalars['String']['output'];
   values: DimensionValueConnection;
 };
@@ -281,6 +283,12 @@ export type DimensionDefinition = {
 export type DimensionDefinitionValuesArgs = {
   after?: InputMaybe<Scalars['String']['input']>;
   first?: InputMaybe<Scalars['Int']['input']>;
+};
+
+export type DimensionUsage = {
+  __typename?: 'DimensionUsage';
+  entity: EntityRef;
+  kind: GateExpressionKind;
 };
 
 export type DimensionValue = {
@@ -342,9 +350,43 @@ export type EntityRefInput = {
   key?: InputMaybe<Scalars['String']['input']>;
 };
 
+export enum GateExpressionKind {
+  Applicability = 'APPLICABILITY',
+  Authorization = 'AUTHORIZATION'
+}
+
+export type GateOutcome = {
+  __typename?: 'GateOutcome';
+  diagnostics: Array<DiagnosticWarning>;
+  eligible: Scalars['Boolean']['output'];
+  specificity?: Maybe<Array<Scalars['Int']['output']>>;
+  state: GateState;
+};
+
+export type GateSimulation = {
+  __typename?: 'GateSimulation';
+  applicability?: Maybe<GateOutcome>;
+  authorization?: Maybe<GateOutcome>;
+  entity: EntityRef;
+};
+
+export type GateSimulationInput = {
+  context: Scalars['JSON']['input'];
+  entity: EntityRefInput;
+};
+
+export enum GateState {
+  False = 'FALSE',
+  Skip = 'SKIP',
+  True = 'TRUE',
+  Unknown = 'UNKNOWN'
+}
+
 export type KnowledgeChunk = {
   __typename?: 'KnowledgeChunk';
+  applicability?: Maybe<Scalars['JSON']['output']>;
   authorityScore?: Maybe<Scalars['Float']['output']>;
+  authorization?: Maybe<Scalars['JSON']['output']>;
   concepts: Array<Concept>;
   content: Scalars['String']['output'];
   effectiveFrom?: Maybe<Scalars['DateTime']['output']>;
@@ -449,6 +491,7 @@ export type NamespaceRef = {
 export type OntologyNeighborhood = {
   __typename?: 'OntologyNeighborhood';
   center: Concept;
+  chunks: Array<KnowledgeChunk>;
   concepts: Array<Concept>;
   relations: Array<ConceptRelation>;
 };
@@ -501,6 +544,8 @@ export type PageInfo = {
 
 export type PromptFragment = {
   __typename?: 'PromptFragment';
+  applicability?: Maybe<Scalars['JSON']['output']>;
+  authorization?: Maybe<Scalars['JSON']['output']>;
   concepts: Array<Concept>;
   content: Scalars['String']['output'];
   id: Scalars['ID']['output'];
@@ -514,6 +559,7 @@ export type PromptFragment = {
   selectionGroup?: Maybe<SelectionGroup>;
   source: SourceLocation;
   status: LifecycleStatus;
+  usedBy: Array<EntityRef>;
 };
 
 export type PromptFragmentConnection = {
@@ -531,6 +577,7 @@ export enum PromptFragmentInclusionMode {
 
 export type PromptFragmentsInput = {
   after?: InputMaybe<Scalars['String']['input']>;
+  concept?: InputMaybe<Scalars['String']['input']>;
   first?: InputMaybe<Scalars['Int']['input']>;
   search?: InputMaybe<Scalars['String']['input']>;
   selectionGroup?: InputMaybe<Scalars['String']['input']>;
@@ -559,6 +606,7 @@ export type Query = {
   retrieve: RetrievalResult;
   runtimeInfo: RuntimeInfo;
   selectionGroups: Array<SelectionGroup>;
+  simulateGates: GateSimulation;
   skill?: Maybe<Skill>;
   skills: SkillConnection;
   tool?: Maybe<Tool>;
@@ -641,6 +689,11 @@ export type QueryRetrieveArgs = {
 };
 
 
+export type QuerySimulateGatesArgs = {
+  input: GateSimulationInput;
+};
+
+
 export type QuerySkillArgs = {
   ref: EntityRefInput;
 };
@@ -701,6 +754,7 @@ export type RetrievalCandidateCounts = {
 export type RetrievalDiagnostics = {
   __typename?: 'RetrievalDiagnostics';
   candidateCounts: RetrievalCandidateCounts;
+  errors: Array<DiagnosticWarning>;
   exclusions: Array<RetrievalExclusion>;
   graphPaths: Array<OntologyPath>;
   packing: PackingDiagnostics;
@@ -825,6 +879,8 @@ export enum SelectionGroupMode {
 
 export type Skill = {
   __typename?: 'Skill';
+  applicability?: Maybe<Scalars['JSON']['output']>;
+  authorization?: Maybe<Scalars['JSON']['output']>;
   concepts: Array<Concept>;
   description?: Maybe<Scalars['String']['output']>;
   id: Scalars['ID']['output'];
@@ -848,6 +904,7 @@ export type SkillConnection = {
 
 export type SkillsInput = {
   after?: InputMaybe<Scalars['String']['input']>;
+  concept?: InputMaybe<Scalars['String']['input']>;
   first?: InputMaybe<Scalars['Int']['input']>;
   search?: InputMaybe<Scalars['String']['input']>;
   selectionGroup?: InputMaybe<Scalars['String']['input']>;
@@ -871,6 +928,8 @@ export type StageTiming = {
 
 export type Tool = {
   __typename?: 'Tool';
+  applicability?: Maybe<Scalars['JSON']['output']>;
+  authorization?: Maybe<Scalars['JSON']['output']>;
   concepts: Array<Concept>;
   dependencies: Array<ToolDependency>;
   dependents: Array<ToolDependency>;
@@ -888,6 +947,7 @@ export type Tool = {
   selectionGroup?: Maybe<SelectionGroup>;
   source: SourceLocation;
   status: LifecycleStatus;
+  usedBy: Array<EntityRef>;
 };
 
 export type ToolConnection = {
@@ -933,6 +993,7 @@ export enum ToolRisk {
 
 export type ToolsInput = {
   after?: InputMaybe<Scalars['String']['input']>;
+  concept?: InputMaybe<Scalars['String']['input']>;
   first?: InputMaybe<Scalars['Int']['input']>;
   search?: InputMaybe<Scalars['String']['input']>;
   selectionGroup?: InputMaybe<Scalars['String']['input']>;
@@ -1050,6 +1111,7 @@ export type ResolversTypes = {
   DiagnosticCause: ResolverTypeWrapper<DiagnosticCause>;
   DiagnosticWarning: ResolverTypeWrapper<DiagnosticWarning>;
   DimensionDefinition: ResolverTypeWrapper<DimensionDefinition>;
+  DimensionUsage: ResolverTypeWrapper<DimensionUsage>;
   DimensionValue: ResolverTypeWrapper<DimensionValue>;
   DimensionValueConnection: ResolverTypeWrapper<DimensionValueConnection>;
   Domain: ResolverTypeWrapper<Domain>;
@@ -1058,6 +1120,11 @@ export type ResolversTypes = {
   EntityRef: ResolverTypeWrapper<EntityRef>;
   EntityRefInput: EntityRefInput;
   Float: ResolverTypeWrapper<Scalars['Float']['output']>;
+  GateExpressionKind: GateExpressionKind;
+  GateOutcome: ResolverTypeWrapper<GateOutcome>;
+  GateSimulation: ResolverTypeWrapper<GateSimulation>;
+  GateSimulationInput: GateSimulationInput;
+  GateState: GateState;
   ID: ResolverTypeWrapper<Scalars['ID']['output']>;
   Int: ResolverTypeWrapper<Scalars['Int']['output']>;
   JSON: ResolverTypeWrapper<Scalars['JSON']['output']>;
@@ -1072,7 +1139,7 @@ export type ResolversTypes = {
   Long: ResolverTypeWrapper<Scalars['Long']['output']>;
   Namespace: ResolverTypeWrapper<Namespace>;
   NamespaceRef: ResolverTypeWrapper<NamespaceRef>;
-  OntologyNeighborhood: ResolverTypeWrapper<OntologyNeighborhood>;
+  OntologyNeighborhood: ResolverTypeWrapper<Omit<OntologyNeighborhood, 'chunks'> & { chunks: Array<ResolversTypes['KnowledgeChunk']> }>;
   OntologyNeighborhoodInput: OntologyNeighborhoodInput;
   OntologyPath: ResolverTypeWrapper<OntologyPath>;
   OntologyPathStep: ResolverTypeWrapper<OntologyPathStep>;
@@ -1147,6 +1214,7 @@ export type ResolversParentTypes = {
   DiagnosticCause: DiagnosticCause;
   DiagnosticWarning: DiagnosticWarning;
   DimensionDefinition: DimensionDefinition;
+  DimensionUsage: DimensionUsage;
   DimensionValue: DimensionValue;
   DimensionValueConnection: DimensionValueConnection;
   Domain: Domain;
@@ -1155,6 +1223,9 @@ export type ResolversParentTypes = {
   EntityRef: EntityRef;
   EntityRefInput: EntityRefInput;
   Float: Scalars['Float']['output'];
+  GateOutcome: GateOutcome;
+  GateSimulation: GateSimulation;
+  GateSimulationInput: GateSimulationInput;
   ID: Scalars['ID']['output'];
   Int: Scalars['Int']['output'];
   JSON: Scalars['JSON']['output'];
@@ -1168,7 +1239,7 @@ export type ResolversParentTypes = {
   Long: Scalars['Long']['output'];
   Namespace: Namespace;
   NamespaceRef: NamespaceRef;
-  OntologyNeighborhood: OntologyNeighborhood;
+  OntologyNeighborhood: Omit<OntologyNeighborhood, 'chunks'> & { chunks: Array<ResolversParentTypes['KnowledgeChunk']> };
   OntologyNeighborhoodInput: OntologyNeighborhoodInput;
   OntologyPath: OntologyPath;
   OntologyPathStep: OntologyPathStep;
@@ -1222,6 +1293,7 @@ export type AgentAssemblyBudgetUsageResolvers<ContextType = any, ParentType exte
 export type AgentAssemblyDiagnosticsResolvers<ContextType = any, ParentType extends ResolversParentTypes['AgentAssemblyDiagnostics'] = ResolversParentTypes['AgentAssemblyDiagnostics']> = {
   bootstrapRetrieval?: Resolver<Maybe<ResolversTypes['RetrievalDiagnostics']>, ParentType, ContextType>;
   dependencyResolutions?: Resolver<Array<ResolversTypes['ToolDependencyResolution']>, ParentType, ContextType>;
+  errors?: Resolver<Array<ResolversTypes['DiagnosticWarning']>, ParentType, ContextType>;
   fragmentCandidates?: Resolver<Array<ResolversTypes['AssemblyCandidateDiagnostic']>, ParentType, ContextType>;
   skillCandidates?: Resolver<Array<ResolversTypes['AssemblyCandidateDiagnostic']>, ParentType, ContextType>;
   timings?: Resolver<Array<ResolversTypes['StageTiming']>, ParentType, ContextType>;
@@ -1383,8 +1455,14 @@ export type DimensionDefinitionResolvers<ContextType = any, ParentType extends R
   required?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
   source?: Resolver<ResolversTypes['SourceLocation'], ParentType, ContextType>;
   trust?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  usedBy?: Resolver<Array<ResolversTypes['DimensionUsage']>, ParentType, ContextType>;
   valueType?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   values?: Resolver<ResolversTypes['DimensionValueConnection'], ParentType, ContextType, RequireFields<DimensionDefinitionValuesArgs, 'first'>>;
+};
+
+export type DimensionUsageResolvers<ContextType = any, ParentType extends ResolversParentTypes['DimensionUsage'] = ResolversParentTypes['DimensionUsage']> = {
+  entity?: Resolver<ResolversTypes['EntityRef'], ParentType, ContextType>;
+  kind?: Resolver<ResolversTypes['GateExpressionKind'], ParentType, ContextType>;
 };
 
 export type DimensionValueResolvers<ContextType = any, ParentType extends ResolversParentTypes['DimensionValue'] = ResolversParentTypes['DimensionValue']> = {
@@ -1424,12 +1502,27 @@ export type EntityRefResolvers<ContextType = any, ParentType extends ResolversPa
   type?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
 };
 
+export type GateOutcomeResolvers<ContextType = any, ParentType extends ResolversParentTypes['GateOutcome'] = ResolversParentTypes['GateOutcome']> = {
+  diagnostics?: Resolver<Array<ResolversTypes['DiagnosticWarning']>, ParentType, ContextType>;
+  eligible?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>;
+  specificity?: Resolver<Maybe<Array<ResolversTypes['Int']>>, ParentType, ContextType>;
+  state?: Resolver<ResolversTypes['GateState'], ParentType, ContextType>;
+};
+
+export type GateSimulationResolvers<ContextType = any, ParentType extends ResolversParentTypes['GateSimulation'] = ResolversParentTypes['GateSimulation']> = {
+  applicability?: Resolver<Maybe<ResolversTypes['GateOutcome']>, ParentType, ContextType>;
+  authorization?: Resolver<Maybe<ResolversTypes['GateOutcome']>, ParentType, ContextType>;
+  entity?: Resolver<ResolversTypes['EntityRef'], ParentType, ContextType>;
+};
+
 export interface JsonScalarConfig extends GraphQLScalarTypeConfig<ResolversTypes['JSON'], any> {
   name: 'JSON';
 }
 
 export type KnowledgeChunkResolvers<ContextType = any, ParentType extends ResolversParentTypes['KnowledgeChunk'] = ResolversParentTypes['KnowledgeChunk']> = {
+  applicability?: Resolver<Maybe<ResolversTypes['JSON']>, ParentType, ContextType>;
   authorityScore?: Resolver<Maybe<ResolversTypes['Float']>, ParentType, ContextType>;
+  authorization?: Resolver<Maybe<ResolversTypes['JSON']>, ParentType, ContextType>;
   concepts?: Resolver<Array<ResolversTypes['Concept']>, ParentType, ContextType>;
   content?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   effectiveFrom?: Resolver<Maybe<ResolversTypes['DateTime']>, ParentType, ContextType>;
@@ -1505,6 +1598,7 @@ export type NamespaceRefResolvers<ContextType = any, ParentType extends Resolver
 
 export type OntologyNeighborhoodResolvers<ContextType = any, ParentType extends ResolversParentTypes['OntologyNeighborhood'] = ResolversParentTypes['OntologyNeighborhood']> = {
   center?: Resolver<ResolversTypes['Concept'], ParentType, ContextType>;
+  chunks?: Resolver<Array<ResolversTypes['KnowledgeChunk']>, ParentType, ContextType>;
   concepts?: Resolver<Array<ResolversTypes['Concept']>, ParentType, ContextType>;
   relations?: Resolver<Array<ResolversTypes['ConceptRelation']>, ParentType, ContextType>;
 };
@@ -1543,6 +1637,8 @@ export type PageInfoResolvers<ContextType = any, ParentType extends ResolversPar
 };
 
 export type PromptFragmentResolvers<ContextType = any, ParentType extends ResolversParentTypes['PromptFragment'] = ResolversParentTypes['PromptFragment']> = {
+  applicability?: Resolver<Maybe<ResolversTypes['JSON']>, ParentType, ContextType>;
+  authorization?: Resolver<Maybe<ResolversTypes['JSON']>, ParentType, ContextType>;
   concepts?: Resolver<Array<ResolversTypes['Concept']>, ParentType, ContextType>;
   content?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
@@ -1556,6 +1652,7 @@ export type PromptFragmentResolvers<ContextType = any, ParentType extends Resolv
   selectionGroup?: Resolver<Maybe<ResolversTypes['SelectionGroup']>, ParentType, ContextType>;
   source?: Resolver<ResolversTypes['SourceLocation'], ParentType, ContextType>;
   status?: Resolver<ResolversTypes['LifecycleStatus'], ParentType, ContextType>;
+  usedBy?: Resolver<Array<ResolversTypes['EntityRef']>, ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 };
 
@@ -1586,6 +1683,7 @@ export type QueryResolvers<ContextType = any, ParentType extends ResolversParent
   retrieve?: Resolver<ResolversTypes['RetrievalResult'], ParentType, ContextType, RequireFields<QueryRetrieveArgs, 'input'>>;
   runtimeInfo?: Resolver<ResolversTypes['RuntimeInfo'], ParentType, ContextType>;
   selectionGroups?: Resolver<Array<ResolversTypes['SelectionGroup']>, ParentType, ContextType>;
+  simulateGates?: Resolver<ResolversTypes['GateSimulation'], ParentType, ContextType, RequireFields<QuerySimulateGatesArgs, 'input'>>;
   skill?: Resolver<Maybe<ResolversTypes['Skill']>, ParentType, ContextType, RequireFields<QuerySkillArgs, 'ref'>>;
   skills?: Resolver<ResolversTypes['SkillConnection'], ParentType, ContextType, Partial<QuerySkillsArgs>>;
   tool?: Resolver<Maybe<ResolversTypes['Tool']>, ParentType, ContextType, RequireFields<QueryToolArgs, 'ref'>>;
@@ -1623,6 +1721,7 @@ export type RetrievalCandidateCountsResolvers<ContextType = any, ParentType exte
 
 export type RetrievalDiagnosticsResolvers<ContextType = any, ParentType extends ResolversParentTypes['RetrievalDiagnostics'] = ResolversParentTypes['RetrievalDiagnostics']> = {
   candidateCounts?: Resolver<ResolversTypes['RetrievalCandidateCounts'], ParentType, ContextType>;
+  errors?: Resolver<Array<ResolversTypes['DiagnosticWarning']>, ParentType, ContextType>;
   exclusions?: Resolver<Array<ResolversTypes['RetrievalExclusion']>, ParentType, ContextType>;
   graphPaths?: Resolver<Array<ResolversTypes['OntologyPath']>, ParentType, ContextType>;
   packing?: Resolver<ResolversTypes['PackingDiagnostics'], ParentType, ContextType>;
@@ -1711,6 +1810,8 @@ export type SelectionGroupMemberResolvers<ContextType = any, ParentType extends 
 };
 
 export type SkillResolvers<ContextType = any, ParentType extends ResolversParentTypes['Skill'] = ResolversParentTypes['Skill']> = {
+  applicability?: Resolver<Maybe<ResolversTypes['JSON']>, ParentType, ContextType>;
+  authorization?: Resolver<Maybe<ResolversTypes['JSON']>, ParentType, ContextType>;
   concepts?: Resolver<Array<ResolversTypes['Concept']>, ParentType, ContextType>;
   description?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
@@ -1746,6 +1847,8 @@ export type StageTimingResolvers<ContextType = any, ParentType extends Resolvers
 };
 
 export type ToolResolvers<ContextType = any, ParentType extends ResolversParentTypes['Tool'] = ResolversParentTypes['Tool']> = {
+  applicability?: Resolver<Maybe<ResolversTypes['JSON']>, ParentType, ContextType>;
+  authorization?: Resolver<Maybe<ResolversTypes['JSON']>, ParentType, ContextType>;
   concepts?: Resolver<Array<ResolversTypes['Concept']>, ParentType, ContextType>;
   dependencies?: Resolver<Array<ResolversTypes['ToolDependency']>, ParentType, ContextType>;
   dependents?: Resolver<Array<ResolversTypes['ToolDependency']>, ParentType, ContextType>;
@@ -1763,6 +1866,7 @@ export type ToolResolvers<ContextType = any, ParentType extends ResolversParentT
   selectionGroup?: Resolver<Maybe<ResolversTypes['SelectionGroup']>, ParentType, ContextType>;
   source?: Resolver<ResolversTypes['SourceLocation'], ParentType, ContextType>;
   status?: Resolver<ResolversTypes['LifecycleStatus'], ParentType, ContextType>;
+  usedBy?: Resolver<Array<ResolversTypes['EntityRef']>, ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
 };
 
@@ -1808,11 +1912,14 @@ export type Resolvers<ContextType = any> = {
   DiagnosticCause?: DiagnosticCauseResolvers<ContextType>;
   DiagnosticWarning?: DiagnosticWarningResolvers<ContextType>;
   DimensionDefinition?: DimensionDefinitionResolvers<ContextType>;
+  DimensionUsage?: DimensionUsageResolvers<ContextType>;
   DimensionValue?: DimensionValueResolvers<ContextType>;
   DimensionValueConnection?: DimensionValueConnectionResolvers<ContextType>;
   Domain?: DomainResolvers<ContextType>;
   DomainConnection?: DomainConnectionResolvers<ContextType>;
   EntityRef?: EntityRefResolvers<ContextType>;
+  GateOutcome?: GateOutcomeResolvers<ContextType>;
+  GateSimulation?: GateSimulationResolvers<ContextType>;
   JSON?: GraphQLScalarType;
   KnowledgeChunk?: KnowledgeChunkResolvers<ContextType>;
   KnowledgeChunkConnection?: KnowledgeChunkConnectionResolvers<ContextType>;

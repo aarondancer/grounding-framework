@@ -77,6 +77,10 @@ type Query {
   tool(ref: EntityRefInput!): Tool
   promptFragments(input: PromptFragmentsInput): PromptFragmentConnection!
   promptFragment(ref: EntityRefInput!): PromptFragment
+  # Evaluate an entity's authorization/applicability gates under a caller
+  # context (spec/10 persistent-context simulator). Uses the same normative
+  # evaluator as retrieval; null when the entity has no such gate.
+  simulateGates(input: GateSimulationInput!): GateSimulation!
 }
 
 input EntityRefInput {
@@ -157,6 +161,8 @@ input SkillsInput {
   search: String
   status: LifecycleStatus
   selectionGroup: String
+  # Exact concept key — entities linked to that concept (backlink browse).
+  concept: String
   first: Int = 50
   after: String
 }
@@ -164,6 +170,7 @@ input ToolsInput {
   search: String
   status: LifecycleStatus
   selectionGroup: String
+  concept: String
   first: Int = 50
   after: String
 }
@@ -171,8 +178,46 @@ input PromptFragmentsInput {
   search: String
   status: LifecycleStatus
   selectionGroup: String
+  concept: String
   first: Int = 50
   after: String
+}
+# Which gate expression references a dimension (spec/10 "used by" browse).
+enum GateExpressionKind {
+  AUTHORIZATION
+  APPLICABILITY
+}
+type DimensionUsage {
+  entity: EntityRef!
+  kind: GateExpressionKind!
+}
+input GateSimulationInput {
+  entity: EntityRefInput!
+  context: JSON!
+}
+# Normative quad-state gate outcome (spec/12, closed vocabulary).
+enum GateState {
+  TRUE
+  FALSE
+  UNKNOWN
+  SKIP
+}
+# Result of evaluating one gate expression under a simulated context.
+# `state` is the normative quad outcome; `eligible` is the post-collapse
+# eligibility bit (spec/12). Authorization gates are fail-closed:
+# evaluation errors surface as diagnostics and ineligible.
+type GateOutcome {
+  state: GateState!
+  eligible: Boolean!
+  # Normative specificity tuple (positiveLeafCount, hierarchyDepth) —
+  # applicability only; lets Explorer apply selection-group modes.
+  specificity: [Int!]
+  diagnostics: [DiagnosticWarning!]!
+}
+type GateSimulation {
+  entity: EntityRef!
+  authorization: GateOutcome
+  applicability: GateOutcome
 }
 input OntologyNeighborhoodInput {
   concept: EntityRefInput!
@@ -300,6 +345,9 @@ type OntologyNeighborhood {
   center: Concept!
   concepts: [Concept!]!
   relations: [ConceptRelation!]!
+  # Chunks linked to any neighborhood concept (chunk_concepts) — powers the
+  # Explorer "linked chunks" toggle. Additive v1 extension (ADR-0006).
+  chunks: [KnowledgeChunk!]!
 }
 
 type KnowledgeSource {
@@ -345,6 +393,8 @@ type KnowledgeChunk {
   concepts: [Concept!]!
   knowledgeItem: KnowledgeItem!
   selectionGroup: SelectionGroup
+  authorization: JSON
+  applicability: JSON
   source: SourceLocation!
   metadata: JSON!
 }
@@ -363,6 +413,9 @@ type DimensionDefinition {
   missingValueBehavior: String!
   trust: String!
   values(first: Int = 100, after: String): DimensionValueConnection!
+  # Entities whose authorization/applicability expressions reference this
+  # dimension key (spec/10 "used by" counts + backlinks).
+  usedBy: [DimensionUsage!]!
   source: SourceLocation!
 }
 type DimensionValue {
@@ -437,6 +490,9 @@ type RetrievalDiagnostics {
   graphPaths: [OntologyPath!]!
   packing: PackingDiagnostics!
   warnings: [DiagnosticWarning!]!
+  # Error-severity diagnostics collected during fail-closed gate evaluation
+  # (authorization/applicability) — additive per ADR-0006.
+  errors: [DiagnosticWarning!]!
 }
 # `stage` MUST use the v1 stage-name registry in spec/14.
 type StageTiming {
@@ -532,6 +588,8 @@ type Skill {
   concepts: [Concept!]!
   promptFragments: [PromptFragment!]!
   tools: [Tool!]!
+  authorization: JSON
+  applicability: JSON
   source: SourceLocation!
   metadata: JSON!
 }
@@ -549,8 +607,12 @@ type Tool {
   concepts: [Concept!]!
   dependencies: [ToolDependency!]!
   dependents: [ToolDependency!]!
+  # Skills that declare this tool — spec/10 "used by" backlink.
+  usedBy: [EntityRef!]!
   inputSchema: JSON
   outputSchema: JSON
+  authorization: JSON
+  applicability: JSON
   source: SourceLocation!
   metadata: JSON!
 }
@@ -571,6 +633,10 @@ type PromptFragment {
   priority: Int!
   concepts: [Concept!]!
   selectionGroup: SelectionGroup
+  authorization: JSON
+  applicability: JSON
+  # Templates and skills that include this fragment — spec/10 "used by" backlink.
+  usedBy: [EntityRef!]!
   source: SourceLocation!
   metadata: JSON!
 }
@@ -642,6 +708,8 @@ type AgentAssemblyDiagnostics {
   bootstrapRetrieval: RetrievalDiagnostics
   timings: [StageTiming!]!
   warnings: [DiagnosticWarning!]!
+  # Error-severity gate-evaluation diagnostics (additive per ADR-0006).
+  errors: [DiagnosticWarning!]!
 }
 type AssemblyCandidateDiagnostic {
   entity: EntityRef!

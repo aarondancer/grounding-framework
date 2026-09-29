@@ -17,6 +17,8 @@
     "@grounding/compiler": "workspace:*",
     "@grounding/core": "workspace:*",
     "@grounding/db": "workspace:*",
+    "@grounding/embeddings": "workspace:*",
+    "@grounding/evals": "workspace:*",
     "@grounding/source": "workspace:*",
     "commander": "15.0.0",
     "chokidar": "5.0.0"

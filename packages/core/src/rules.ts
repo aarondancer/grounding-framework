@@ -131,7 +131,12 @@ export function evaluateAuthorization(
   return { allowed: out.state === "true", diagnostics: [] };
 }
 
-function leafDimensions(expr: Expression): string[] {
+/**
+ * Every `dimension` key referenced by an expression — walks only the
+ * normative combinators (allOf/anyOf/noneOf). Used by authorization
+ * pre-checks and by the API's dimension "used by" backlinks.
+ */
+export function leafDimensions(expr: Expression): string[] {
   if (expr === null || typeof expr !== "object") return [];
   if (isLeaf(expr)) return [expr.dimension];
   const out: string[] = [];

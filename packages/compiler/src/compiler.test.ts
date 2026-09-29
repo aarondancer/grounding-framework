@@ -1,9 +1,9 @@
-import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { describe, expect, test } from "bun:test";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { deterministicProvider } from "@grounding/embeddings";
 import { loadSourceTree } from "@grounding/source";
+import { dbTest, dbCacheTest as itCache, writeCorpus } from "@grounding/test-support";
 import { build } from "./build.ts";
 import { compileTree } from "./ir.ts";
 import { readManifest, saveManifest, writeManifest } from "./manifest.ts";
@@ -31,22 +31,15 @@ const FIXTURE: Record<string, string> = {
   "evals/agent-assembly/a.jsonc": `{"name":"a","template":"t","expect":{"skills":["s"],"tools":["tool-a"],"promptFragments":["pf"]}}`,
 };
 
-const tmpDirs: string[] = [];
 function corpus(overrides: Record<string, string | null> = {}, uuidPrefix = "") {
-  const dir = mkdtempSync(join(tmpdir(), "grounding-compile-"));
-  tmpDirs.push(dir);
+  const files: Record<string, string> = {};
   for (const [rel, raw] of Object.entries({ ...FIXTURE, ...overrides })) {
     if (raw === null) continue;
-    const p = join(dir, rel);
-    mkdirSync(dirname(p), { recursive: true });
-    writeFileSync(p, uuidPrefix ? raw.replaceAll("019d0000", uuidPrefix) : raw, "utf8");
+    files[rel] = uuidPrefix ? raw.replaceAll("019d0000", uuidPrefix) : raw;
   }
+  const dir = writeCorpus("grounding-compile-", files);
   return { dir, loaded: loadSourceTree(dir) };
 }
-
-afterAll(() => {
-  for (const d of tmpDirs) rmSync(d, { recursive: true, force: true });
-});
 
 /** compileTree + the fields writeManifest requires beyond CompileResult. */
 function manifestInput(dir: string) {
@@ -194,8 +187,7 @@ describe("manifest + plan", () => {
  */
 describe("embeddings + lexical indexing (real postgres)", () => {
   const NS = "019e1000-0000-7000-8000-000000000001";
-  const hasDb = Boolean(process.env.DATABASE_URL);
-  const it = hasDb ? test : test.skip;
+  const it = dbTest;
 
   function countingProvider() {
     const calls: string[][] = [];
@@ -317,7 +309,7 @@ describe("embeddings + lexical indexing (real postgres)", () => {
 
   // spec/16: a different namespace with identical semantic texts is a pure
   // cache hit — Valkey embedding-content keys carry config+semantic hashes.
-  const itCache = process.env.DATABASE_URL && process.env.VALKEY_ADDRESSES ? test : test.skip;
+
   itCache("embedding-content cache serves repeated semantic text across namespaces", async () => {
     const { connect } = await import("@grounding/db");
     const { sql } = await import("drizzle-orm");
@@ -370,7 +362,7 @@ describe("embeddings + lexical indexing (real postgres)", () => {
  * Uses a distinct UUID prefix so it never collides with the canonical corpus.
  */
 describe("materialization (real postgres)", () => {
-  const it = process.env.DATABASE_URL ? test : test.skip;
+  const it = dbTest;
   const NS = "019e0000-0000-7000-8000-000000000001";
 
   it("clean build materializes, then a rebuild converges to zero work", async () => {

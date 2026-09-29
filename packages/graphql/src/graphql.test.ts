@@ -1,13 +1,17 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { build } from "@grounding/compiler";
-import { deterministicProvider } from "@grounding/embeddings";
+import {
+  ensureBuilt,
+  dbTest as it,
+  makeTestServices,
+  rebuildCanonicalCorpus,
+  resetNamespaces,
+  servicesConfigured,
+  writeCorpus,
+} from "@grounding/test-support";
 import { graphql, parse, validate } from "graphql";
 import type { GraphQLContext, ServiceContext } from "./context.ts";
 import { createLoaders } from "./loaders.ts";
-import { depthCostRule } from "./plugins.ts";
+import { depthCostRule, withTimeout } from "./plugins.ts";
 import { buildSchema, toGraphQLError } from "./schema.ts";
 
 const NS = "019f3000-0000-7000-8000-000000000001";
@@ -19,7 +23,7 @@ const U = (n: number) => `019f3000-0000-7000-8000-${String(n).padStart(12, "0")}
  * (`clearance`) that only the host trusted-context hook may set.
  */
 const FIXTURE: Record<string, string> = {
-  "grounding.config.jsonc": `{"version":1,"embedding":{"provider":"deterministic","model":"m","dimensions":1536}}`,
+  "grounding.config.jsonc": `{"version":1,"repository":{"provider":"github","url":"https://github.com/acme/ops-repo"},"embedding":{"provider":"deterministic","model":"m","dimensions":1536}}`,
   "namespace.jsonc": `{"id":"${NS}","key":"gql","name":"GQL","defaultRetrievalProfile":"default"}`,
   "concepts/domains.jsonc": `{"domains":[{"id":"${U(10)}","key":"ops","name":"Ops"}]}`,
   "concepts/deploy.jsonc": `{"id":"${U(11)}","key":"deploy","name":"Deployment","status":"published","domains":["ops"],"aliases":["shipping"]}`,
@@ -44,23 +48,7 @@ const FIXTURE: Record<string, string> = {
   "knowledge/vault.md": `---\n{"id":"${U(91)}","key":"vault-doc","title":"Vault Guide","status":"published","concepts":["deploy"],"authorization":{"dimension":"clearance","operator":"includes","value":"ops"}}\n---\n\n# Vault Guide\n\ncleared vault runbook\n`,
 };
 
-const tmpDirs: string[] = [];
-function corpus() {
-  const dir = mkdtempSync(join(tmpdir(), "grounding-gql-"));
-  tmpDirs.push(dir);
-  for (const [rel, raw] of Object.entries(FIXTURE)) {
-    const p = join(dir, rel);
-    mkdirSync(dirname(p), { recursive: true });
-    writeFileSync(p, raw, "utf8");
-  }
-  return dir;
-}
-afterAll(() => {
-  for (const d of tmpDirs) rmSync(d, { recursive: true, force: true });
-});
-
-const hasDb = Boolean(process.env.DATABASE_URL);
-const it = hasDb ? test : test.skip;
+const corpus = () => writeCorpus("grounding-gql-", FIXTURE);
 
 type GqlResult = {
   data?: Record<string, unknown> | null;
@@ -90,29 +78,17 @@ async function execGql(
   return { ...res, errors } as unknown as GqlResult;
 }
 
-async function makeServices(extra?: Partial<ServiceContext>) {
-  const { connect } = await import("@grounding/db");
-  const conn = connect();
-  const services: ServiceContext = {
-    db: conn.db,
-    cache: null,
-    environment: "local",
-    embedding: { provider: deterministicProvider(1536), configHash: "test-deterministic" },
-    ...extra,
-  };
-  return { conn, services };
+/**
+ * Build the fixture into the shared test DB. Browse queries resolve the
+ * *default* namespace — ambiguous if other namespaces are materialized — so
+ * wipe them before materializing (other files restore via afterAll below).
+ */
+async function buildFixture(db: import("@grounding/db").Database, dir: string) {
+  await resetNamespaces(db);
+  await ensureBuilt(db, dir);
 }
 
-async function ensureBuilt(db: import("@grounding/db").Database, dir: string) {
-  const { sql } = await import("drizzle-orm");
-  // Tests own this DB: browse queries resolve the *default* namespace, which
-  // is ambiguous if other namespaces are materialized — wipe them first.
-  await db.execute(sql`delete from namespaces`);
-  const res = await build(dir, db, { clean: true, provider: deterministicProvider(1536) });
-  if (!res.ok) throw new Error(`fixture build failed: ${JSON.stringify(res.diagnostics)}`);
-}
-
-async function teardown(conn: Awaited<ReturnType<typeof makeServices>>["conn"]) {
+async function teardown(conn: Awaited<ReturnType<typeof makeTestServices>>["conn"]) {
   const { sql } = await import("drizzle-orm");
   await conn.db.execute(sql`delete from namespaces where id = ${NS}`);
   await conn.pool.end();
@@ -122,18 +98,11 @@ afterAll(async () => {
   // ensureBuilt wipes all namespaces (default-ns queries require exactly
   // one); restore the canonical corpus afterwards — other test files
   // (e.g. db dimension registry) assume it stays materialized.
-  if (!process.env.DATABASE_URL) return;
+  if (!servicesConfigured()) return;
   const { connect } = await import("@grounding/db");
-  const { findGroundingRoot } = await import("@grounding/source");
-  const root = findGroundingRoot(process.cwd());
-  if (!root) return;
   const conn = connect();
   try {
-    const res = await build(root, conn.db, {
-      clean: true,
-      provider: deterministicProvider(1536),
-    });
-    if (!res.ok) throw new Error(`canonical rebuild failed: ${JSON.stringify(res.diagnostics)}`);
+    await rebuildCanonicalCorpus(conn.db);
   } finally {
     await conn.pool.end();
   }
@@ -141,10 +110,10 @@ afterAll(async () => {
 
 describe("graphql api (real postgres)", () => {
   it("runtimeInfo + browse queries resolve materialized entities", async () => {
-    const { conn, services } = await makeServices();
+    const { conn, services } = await makeTestServices();
     const dir = corpus();
     try {
-      await ensureBuilt(conn.db, dir);
+      await buildFixture(conn.db, dir);
 
       const info = await execGql(
         services,
@@ -212,10 +181,10 @@ describe("graphql api (real postgres)", () => {
   });
 
   it("entity refs: exactly one of id/key; not-found → null", async () => {
-    const { conn, services } = await makeServices();
+    const { conn, services } = await makeTestServices();
     const dir = corpus();
     try {
-      await ensureBuilt(conn.db, dir);
+      await buildFixture(conn.db, dir);
       const byKey = await execGql(
         services,
         `{ concept(ref: {key: "deploy"}) { key name aliases { alias } outgoingRelations { nodes { type { key } targetConcept { key } } } incomingRelations { nodes { type { key } sourceConcept { key } } } source { path } } }`,
@@ -255,10 +224,10 @@ describe("graphql api (real postgres)", () => {
   });
 
   it("chunk refs and keyset pagination", async () => {
-    const { conn, services } = await makeServices();
+    const { conn, services } = await makeTestServices();
     const dir = corpus();
     try {
-      await ensureBuilt(conn.db, dir);
+      await buildFixture(conn.db, dir);
       const byParts = await execGql(
         services,
         `{ knowledgeChunk(ref: {knowledgeItem: "deploy-doc", key: "deploy-doc-0"}) { key knowledgeItem { key } } }`,
@@ -331,10 +300,10 @@ describe("graphql api (real postgres)", () => {
   });
 
   it("ontology neighborhood: direction, filters, depth validation", async () => {
-    const { conn, services } = await makeServices();
+    const { conn, services } = await makeTestServices();
     const dir = corpus();
     try {
-      await ensureBuilt(conn.db, dir);
+      await buildFixture(conn.db, dir);
       const both = await execGql(
         services,
         `{ ontologyNeighborhood(input: {concept: {key: "deploy"}}) { center { key } concepts { key } relations { type { key } targetConcept { key } } } }`,
@@ -370,10 +339,10 @@ describe("graphql api (real postgres)", () => {
   });
 
   it("retrieve + resolveConcepts through the GraphQL seam", async () => {
-    const { conn, services } = await makeServices();
+    const { conn, services } = await makeTestServices();
     const dir = corpus();
     try {
-      await ensureBuilt(conn.db, dir);
+      await buildFixture(conn.db, dir);
       const res = await execGql(
         services,
         `query($input: RetrievalInput!) { retrieve(input: $input) { namespace { key } runtimeRevision query resolvedConcepts { concept { key } matchType } results { rank score chunk { key knowledgeItem { key } concepts { key } } reasons { code } } packedContext { estimatedTokens chunks { key } } diagnostics { candidateCounts { fullText unique } exclusions { code redacted } } } }`,
@@ -408,10 +377,10 @@ describe("graphql api (real postgres)", () => {
   });
 
   it("assembleAgent: full result mapping + availableBindings semantics", async () => {
-    const { conn, services } = await makeServices();
+    const { conn, services } = await makeTestServices();
     const dir = corpus();
     try {
-      await ensureBuilt(conn.db, dir);
+      await buildFixture(conn.db, dir);
       const query = `query($input: AgentAssemblyInput!) { assembleAgent(input: $input) { runtimeRevision contextHash template { key budgets { maxSkills } promptFragments { key } } renderedPrompt promptFragments { fragment { key inclusionMode } sources renderedOrder estimatedTokens } skills { skill { key } rank } tools { tool { key runtimeBinding } sources } bootstrapKnowledge { chunk { key } } budgetUsage { skills promptTokens } diagnostics { toolCandidates { entity { key } selected code } dependencyResolutions { sourceTool { key } targetTool { key } requirement status } warnings { code } } } }`;
 
       const res = await execGql(services, query, {
@@ -463,10 +432,11 @@ describe("graphql api (real postgres)", () => {
 
   it("trust boundary: server dims only via host hook; stable error codes", async () => {
     const trustedContext = () => ({ clearance: ["ops"] });
-    const { conn, services } = await makeServices({ trustedContext });
+    const { conn, services: base } = await makeTestServices();
+    const services: ServiceContext = { ...base, trustedContext };
     const dir = corpus();
     try {
-      await ensureBuilt(conn.db, dir);
+      await buildFixture(conn.db, dir);
 
       // Client self-assertion of a trust:server dimension fails closed.
       const denied = await execGql(
@@ -501,7 +471,7 @@ describe("graphql api (real postgres)", () => {
       expect(itemKeys).toContain("vault-doc");
 
       // Without the hook the vault doc stays gated out.
-      const { conn: conn2, services: noTrust } = await makeServices();
+      const { conn: conn2, services: noTrust } = await makeTestServices();
       try {
         const ret2 = await execGql(
           noTrust,
@@ -529,10 +499,10 @@ describe("graphql api (real postgres)", () => {
   });
 
   it("service diagnostics map to stable extensions.code + diagnostics list", async () => {
-    const { conn, services } = await makeServices();
+    const { conn, services } = await makeTestServices();
     const dir = corpus();
     try {
-      await ensureBuilt(conn.db, dir);
+      await buildFixture(conn.db, dir);
       const res = await execGql(
         services,
         `query($input: AgentAssemblyInput!) { assembleAgent(input: $input) { template { key } } }`,
@@ -548,6 +518,97 @@ describe("graphql api (real postgres)", () => {
         { input: { namespace: "ghost", query: "x" } },
       );
       expect(badNs.errors?.[0]?.extensions?.code).toBe("NAMESPACE_NOT_FOUND");
+    } finally {
+      await teardown(conn);
+    }
+  });
+
+  it("explorer surfaces: gates, usedBy, simulateGates, concept backlinks, viewUrl", async () => {
+    const { conn, services } = await makeTestServices();
+    const dir = corpus();
+    try {
+      await buildFixture(conn.db, dir);
+
+      // Gate expressions + repository source links on gated entities.
+      const frag = await execGql(
+        services,
+        `query { promptFragment(ref: {key: "restricted"}) {
+          key authorization applicability source { path repositoryUrl viewUrl } } }`,
+      );
+      const f = frag.data!.promptFragment as Record<string, unknown>;
+      expect((f.authorization as Record<string, unknown>).dimension).toBe("roles");
+      expect(f.applicability).toBeNull();
+      const src = f.source as { path: string; repositoryUrl: string; viewUrl: string };
+      expect(src.repositoryUrl).toBe("https://github.com/acme/ops-repo");
+      // Not built inside a git repo → ref falls back to HEAD.
+      expect(src.viewUrl).toBe(`https://github.com/acme/ops-repo/blob/HEAD/${src.path}`);
+
+      // Dimension "used by" backlinks across gated entity tables.
+      const used = await execGql(
+        services,
+        `query { dimension(ref: {key: "roles"}) {
+          key usedBy { entity { key type } kind } } }`,
+      );
+      const uses = (
+        used.data!.dimension as {
+          usedBy: { entity: { key: string; type: string }; kind: string }[];
+        }
+      ).usedBy;
+      expect(uses).toContainEqual({
+        entity: { key: "restricted", type: "prompt_fragment" },
+        kind: "AUTHORIZATION",
+      });
+
+      // simulateGates: normative evaluation under a caller context.
+      const yes = await execGql(
+        services,
+        `query($i: GateSimulationInput!) { simulateGates(input: $i) {
+          entity { key type } authorization { state eligible } applicability { state } } }`,
+        { i: { entity: { key: "restricted" }, context: { roles: ["manager"] } } },
+      );
+      const sim = yes.data!.simulateGates as Record<string, unknown>;
+      expect((sim.entity as { type: string }).type).toBe("prompt_fragment");
+      expect((sim.authorization as { eligible: boolean }).eligible).toBe(true);
+      expect(sim.applicability).toBeNull();
+
+      const no = await execGql(
+        services,
+        `query($i: GateSimulationInput!) { simulateGates(input: $i) {
+          authorization { eligible state } } }`,
+        { i: { entity: { key: "restricted" }, context: { roles: [] } } },
+      );
+      expect(
+        ((no.data!.simulateGates as Record<string, unknown>).authorization as { eligible: boolean })
+          .eligible,
+      ).toBe(false);
+
+      // Caller cannot set the server-trusted `clearance` dimension — the
+      // primary diagnostic code surfaces, not a masked INVALID_INPUT.
+      const denied = await execGql(
+        services,
+        `query($i: GateSimulationInput!) { simulateGates(input: $i) { entity { key } } }`,
+        { i: { entity: { key: "vaultfrag" }, context: { clearance: ["ops"] } } },
+      );
+      expect(denied.errors?.[0]?.extensions?.code).toBe("CONTEXT_DIMENSION_NOT_CLIENT_SETTABLE");
+
+      // Concept backlink filter on assembly browse inputs.
+      const byConcept = await execGql(
+        services,
+        `query { skills(input: {concept: "deploy"}) { nodes { key } }
+                tools(input: {concept: "deploy"}) { nodes { key } } }`,
+      );
+      expect(
+        (byConcept.data!.skills as { nodes: { key: string }[] }).nodes.map((n) => n.key),
+      ).toEqual(["deployer"]);
+      expect(
+        (byConcept.data!.tools as { nodes: { key: string }[] }).nodes.map((n) => n.key),
+      ).toEqual(["deploy-tool"]);
+
+      const unknown = await execGql(
+        services,
+        `query { skills(input: {concept: "ghost"}) { nodes { key } } }`,
+      );
+      expect(unknown.errors?.[0]?.extensions?.code).toBe("ENTITY_NOT_FOUND");
     } finally {
       await teardown(conn);
     }
@@ -568,6 +629,15 @@ describe("query limits + error masking (no db)", () => {
     const costly = `query { a: concepts(input: {first: 200}) { nodes { key } } b: concepts(input: {first: 200}) { nodes { key } } }`;
     const costErrors = validate(schema, parse(costly), [depthCostRule(12, 5)]);
     expect(costErrors.length).toBe(1);
+  });
+
+  test("withTimeout bounds execution; expiry maps to INTERNAL_ERROR (spec/09)", async () => {
+    await expect(withTimeout(() => "fast", 50)).resolves.toBe("fast");
+    const slow = withTimeout(() => new Promise(() => {}), 5);
+    await expect(slow).rejects.toMatchObject({
+      extensions: { code: "INTERNAL_ERROR" },
+      message: expect.stringContaining("timeout"),
+    });
   });
 
   test("toGraphQLError masks unexpected errors as INTERNAL_ERROR", () => {

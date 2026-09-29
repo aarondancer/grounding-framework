@@ -20,11 +20,14 @@
     "graphql-yoga": "5.24.1"
   },
   "devDependencies": {
-    "@graphql-codegen/cli": "^7.4.3",
-    "@graphql-codegen/typescript": "^6.1.0",
-    "@graphql-codegen/typescript-resolvers": "^6.1.0",
+    "@graphql-codegen/cli": "7.4.3",
+    "@graphql-codegen/introspection": "6.1.0",
+    "@graphql-codegen/typescript": "6.1.0",
+    "@graphql-codegen/typescript-operations": "6.1.8",
+    "@graphql-codegen/typescript-resolvers": "6.1.0",
     "@grounding/compiler": "workspace:*",
     "@grounding/embeddings": "workspace:*",
-    "@grounding/source": "workspace:*"
+    "@grounding/source": "workspace:*",
+    "@grounding/test-support": "workspace:*"
   }
 }
