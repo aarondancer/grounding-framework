@@ -63,7 +63,11 @@ jobs:
       # Smoke must not depend on whatever namespace state tests happened to
       # leave behind — materialize the canonical corpus explicitly.
       - name: Seed canonical corpus
-        run: bun apps/cli/src/index.ts build --clean
+        # runtimeInfo requires exactly one namespace — wipe leftovers from the
+        # test suites, then materialize the canonical corpus.
+        run: |
+          psql "$DATABASE_URL" -c "delete from namespaces"
+          bun apps/cli/src/index.ts build --clean
         env:
           DATABASE_URL: postgresql://grounding:grounding@localhost:5432/grounding
           GROUNDING_ENV: local
