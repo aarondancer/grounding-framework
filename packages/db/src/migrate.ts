@@ -6,8 +6,8 @@ import { connect } from "./client.ts";
 const here = dirname(fileURLToPath(import.meta.url));
 const migrationsFolder = resolve(here, "../../../migrations");
 
-export async function runMigrations(): Promise<void> {
-  const { pool, db } = connect();
+export async function runMigrations(connectionString?: string): Promise<void> {
+  const { pool, db } = connect(connectionString ? { connectionString } : undefined);
   try {
     await migrate(db, { migrationsFolder });
   } finally {

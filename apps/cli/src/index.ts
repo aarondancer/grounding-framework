@@ -1,11 +1,12 @@
 #!/usr/bin/env bun
-import { execSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { execFileSync, execSync } from "node:child_process";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
 import { cacheConfigFromEnv, createRuntimeCache } from "@grounding/cache";
 import { build, readManifest } from "@grounding/compiler";
 import { type Diagnostic, RuntimeErrorCode } from "@grounding/core";
-import { connect } from "@grounding/db";
+import { connect, schema as t } from "@grounding/db";
 import { type EmbeddingConfig, resolveEmbeddingRuntime } from "@grounding/embeddings";
 import {
   BACKEND_NAMES,
@@ -26,9 +27,10 @@ import {
 } from "@grounding/source";
 import { watch } from "chokidar";
 import { Command } from "commander";
+import { and, desc, eq, sql } from "drizzle-orm";
 
 /**
- * grounding CLI — v1 commands: validate, build, dev (spec/07).
+ * grounding CLI — validate, build, deploy, deployments, dev, eval (spec/07).
  * Machine output (`--format json`) goes to stdout only; human/progress
  * logging goes to stderr.
  */
@@ -270,6 +272,236 @@ async function runBuild(opts: {
   }
 }
 
+// ---------------------------------------------------------------------------
+// deploy / deployments — immutable Git-revision deployment (M9)
+// ---------------------------------------------------------------------------
+
+/** `git <args>` in `cwd`; null on failure. Args array — never shell-joined. */
+function git(cwd: string, args: string[]): string | null {
+  try {
+    return execFileSync("git", args, {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Locate the grounding source root inside a checked-out worktree — handles
+ * refs from before the corpus root moved. Returns the directory containing
+ * grounding.config.jsonc (shallowest match), or null.
+ */
+function findConfigDir(worktree: string, depth = 0): string | null {
+  if (depth > 4 || existsSync(join(worktree, GROUNDING_CONFIG_NAME))) {
+    return existsSync(join(worktree, GROUNDING_CONFIG_NAME)) ? worktree : null;
+  }
+  let dirs: string[];
+  try {
+    dirs = readdirSync(worktree, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && d.name !== ".git" && d.name !== "node_modules")
+      .map((d) => join(worktree, d.name));
+  } catch {
+    return null;
+  }
+  for (const dir of dirs) {
+    const found = findConfigDir(dir, depth + 1);
+    if (found) return found;
+  }
+  return null;
+}
+
+/**
+ * `grounding deploy` materializes the *committed* tree at a ref (default
+ * HEAD) via a detached worktree — working-tree edits can never leak into a
+ * deployment. The deployment row records the resolved commit; rollback is
+ * `deploy --ref <prior sha>` (see ops docs).
+ */
+export async function runDeploy(
+  opts: { ref?: string; environment?: string; format: string },
+  cwd = process.cwd(),
+): Promise<number> {
+  const fail = (message: string) => emitFailure(opts.format, message);
+
+  const root = findGroundingRoot(cwd);
+  if (!root) return fail(`no grounding.config.jsonc found walking up from ${cwd}`);
+  const repoTop = git(root, ["rev-parse", "--show-toplevel"]);
+  if (!repoTop) {
+    return fail("deploy requires a git repository (use `grounding build` for working-tree builds)");
+  }
+  const prefix = git(root, ["rev-parse", "--show-prefix"]) ?? "";
+  const ref = opts.ref ?? "HEAD";
+  const sha = git(repoTop, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
+  if (!sha) return fail(`cannot resolve git ref: ${ref}`);
+
+  const worktree = mkdtempSync(join(tmpdir(), "grounding-deploy-"));
+  let added = false;
+  const cleanup = () => {
+    try {
+      execFileSync("git", ["worktree", "remove", "--force", worktree], {
+        cwd: repoTop,
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+    } catch {
+      rmSync(worktree, { recursive: true, force: true });
+      try {
+        execFileSync("git", ["worktree", "prune"], {
+          cwd: repoTop,
+          stdio: ["ignore", "pipe", "ignore"],
+        });
+      } catch {
+        /* best effort */
+      }
+    }
+  };
+
+  try {
+    try {
+      execFileSync("git", ["worktree", "add", "--detach", worktree, sha], {
+        cwd: repoTop,
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+      added = true;
+    } catch (err) {
+      return fail(
+        `git worktree add failed for ${sha.slice(0, 12)}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    let deployRoot = join(worktree, prefix);
+    if (!existsSync(join(deployRoot, GROUNDING_CONFIG_NAME))) {
+      // The grounding root may have moved since this ref — search the snapshot.
+      const found = findConfigDir(worktree);
+      if (!found) {
+        return fail(
+          `ref ${ref} (${sha.slice(0, 12)}) has no grounding source at ${prefix || "repo root"}`,
+        );
+      }
+      deployRoot = found;
+    }
+
+    const { pool, db } = connect();
+    const cache = await createRuntimeCache(cacheConfigFromEnv()).catch(() => null);
+    try {
+      const result = await build(deployRoot, db, {
+        environment: opts.environment,
+        cache,
+        initiatedBy: process.env.GROUNDING_DEPLOY_INITIATED_BY,
+      });
+      if (opts.format === "json") {
+        process.stdout.write(
+          `${JSON.stringify({
+            ok: result.ok,
+            gitCommit: sha,
+            deploymentId: result.deploymentId,
+            runtimeRevision: result.runtimeRevision,
+            sourceHash: result.sourceHash || null,
+            upserts: result.plan?.upserts.length ?? 0,
+            deletes: result.plan?.deletes.length ?? 0,
+            diagnostics: result.diagnostics.map(diagnosticToJson),
+          })}\n`,
+        );
+      } else {
+        printDiagnostics(result.diagnostics);
+        if (result.ok) {
+          console.error(
+            `deploy: ${sha.slice(0, 12)} → revision ${result.runtimeRevision} (deployment ${result.deploymentId})`,
+          );
+        } else {
+          console.error("deploy: failed");
+        }
+      }
+      return result.ok ? 0 : 1;
+    } finally {
+      await cache?.close();
+      await pool.end();
+    }
+  } finally {
+    if (added) cleanup();
+    else rmSync(worktree, { recursive: true, force: true });
+  }
+}
+
+/** Emit an INVALID_INPUT diagnostic in the requested format; return exit 1. */
+function emitFailure(format: string, message: string): number {
+  emit(
+    null,
+    [{ severity: "error", code: RuntimeErrorCode.INVALID_INPUT, message }],
+    1,
+    0,
+    format === "json" ? "json" : "human",
+  );
+  return 1;
+}
+
+/**
+ * `grounding deployments` — deployment history for the namespace declared by
+ * the local corpus, newest first. Pick a `gitCommit` for `deploy --ref`.
+ */
+export async function runDeployments(
+  opts: { environment?: string; limit?: number; format: string },
+  cwd = process.cwd(),
+): Promise<number> {
+  const fail = (message: string) => emitFailure(opts.format, message);
+  const root = findGroundingRoot(cwd);
+  if (!root) return fail(`no grounding.config.jsonc found walking up from ${cwd}`);
+  const loaded = loadSourceTree(root);
+  const namespaceId = loaded.entities.find((e) => e.kind === "namespace")?.id;
+  if (!namespaceId) return fail("could not resolve namespace id from the corpus");
+
+  const limit = opts.limit ?? 20;
+  if (!Number.isInteger(limit) || limit <= 0) return fail("--limit must be a positive integer");
+
+  const { pool, db } = connect();
+  try {
+    const deployments = await db
+      .select({
+        id: t.deployments.id,
+        environment: t.deployments.environment,
+        gitCommit: t.deployments.gitCommit,
+        sourceHash: t.deployments.sourceHash,
+        status: t.deployments.status,
+        errorMessage: t.deployments.errorMessage,
+        startedAt: t.deployments.startedAt,
+        completedAt: t.deployments.completedAt,
+        active: sql<boolean>`${t.namespaceRuntimeState.activeDeploymentId} = ${t.deployments.id}`,
+        runtimeRevision: t.namespaceRuntimeState.runtimeRevision,
+      })
+      .from(t.deployments)
+      .leftJoin(
+        t.namespaceRuntimeState,
+        and(
+          eq(t.namespaceRuntimeState.namespaceId, t.deployments.namespaceId),
+          eq(t.namespaceRuntimeState.environment, t.deployments.environment),
+        ),
+      )
+      .where(
+        and(
+          eq(t.deployments.namespaceId, namespaceId),
+          opts.environment ? eq(t.deployments.environment, opts.environment) : undefined,
+        ),
+      )
+      .orderBy(desc(t.deployments.startedAt))
+      .limit(limit);
+    if (opts.format === "json") {
+      process.stdout.write(`${JSON.stringify({ namespaceId, deployments })}\n`);
+    } else {
+      for (const d of deployments) {
+        const sha = d.gitCommit ? d.gitCommit.slice(0, 12) : "-";
+        const mark = d.active ? " *" : "";
+        console.log(
+          `${d.status.padEnd(10)} ${d.environment.padEnd(12)} ${sha} ${d.startedAt.toISOString()}${mark}`,
+        );
+      }
+      if (deployments.length === 0) console.log("no deployments recorded");
+    }
+    return 0;
+  } finally {
+    await pool.end();
+  }
+}
+
 /** `grounding dev`: debounced watch + rebuild (spec/07). */
 async function runDev(): Promise<void> {
   const root = findGroundingRoot(process.cwd());
@@ -496,6 +728,38 @@ export function createCli(): Command {
         return;
       }
       process.exitCode = await runBuild(opts);
+    });
+
+  program
+    .command("deploy")
+    .description(
+      "Materialize an immutable Git revision (default HEAD); rollback: deploy --ref <sha>",
+    )
+    .option("--ref <ref>", "git ref/commit to deploy")
+    .option("--environment <env>", "deployment environment (default: GROUNDING_ENV or 'local')")
+    .option("--format <format>", "output format: human|json", "human")
+    .action(async (opts: { ref?: string; environment?: string; format: string }) => {
+      if (opts.format !== "human" && opts.format !== "json") {
+        console.error("error: --format must be human|json");
+        process.exitCode = 2;
+        return;
+      }
+      process.exitCode = await runDeploy(opts);
+    });
+
+  program
+    .command("deployments")
+    .description("List deployment history for this namespace (newest first)")
+    .option("--environment <env>", "filter to one environment")
+    .option("--limit <n>", "max rows", (v: string) => Number(v), 20)
+    .option("--format <format>", "output format: human|json", "human")
+    .action(async (opts: { environment?: string; limit: number; format: string }) => {
+      if (opts.format !== "human" && opts.format !== "json") {
+        console.error("error: --format must be human|json");
+        process.exitCode = 2;
+        return;
+      }
+      process.exitCode = await runDeployments(opts);
     });
 
   program

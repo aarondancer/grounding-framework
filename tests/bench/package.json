@@ -1,15 +1,10 @@
 {
-  "name": "@grounding/cli",
+  "name": "@grounding/bench",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "bin": {
-    "grounding": "./src/index.ts"
-  },
-  "exports": {
-    ".": "./src/index.ts"
-  },
   "scripts": {
+    "bench": "bun bench.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -18,13 +13,8 @@
     "@grounding/core": "workspace:*",
     "@grounding/db": "workspace:*",
     "@grounding/embeddings": "workspace:*",
-    "@grounding/evals": "workspace:*",
-    "@grounding/source": "workspace:*",
-    "commander": "15.0.0",
-    "chokidar": "5.0.0",
-    "drizzle-orm": "0.45.3"
-  },
-  "devDependencies": {
-    "@grounding/test-support": "workspace:*"
+    "@grounding/assembly": "workspace:*",
+    "@grounding/retrieval": "workspace:*",
+    "@grounding/source": "workspace:*"
   }
 }

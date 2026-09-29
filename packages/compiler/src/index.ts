@@ -12,6 +12,13 @@ export {
   writeManifest,
 } from "./manifest.ts";
 export type { BuildProvenance } from "./materialize.ts";
-export { applyPlan, checkEmbeddingDimension } from "./materialize.ts";
+export {
+  applyPlan,
+  beginDeployment,
+  checkEmbeddingDimension,
+  failDeployment,
+  namespaceEntityIds,
+  semanticEntityIds,
+} from "./materialize.ts";
 export type { MaterializationPlan } from "./plan.ts";
 export { planMaterialization } from "./plan.ts";

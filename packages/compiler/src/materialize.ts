@@ -2,7 +2,7 @@ import type { Diagnostic } from "@grounding/core";
 import { newId, RuntimeErrorCode, SourceErrorCode } from "@grounding/core";
 import type { Database } from "@grounding/db";
 import * as t from "@grounding/db/schema";
-import { and, count, eq, inArray, sql } from "drizzle-orm";
+import { and, count, eq, inArray, ne, sql } from "drizzle-orm";
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 import type { ChildTable, CompiledEntity, EntityTable } from "./ir.ts";
 import { TABLE_ORDER } from "./ir.ts";
@@ -115,6 +115,8 @@ const CHILD_PARENT_COL: Record<ChildTable, PgColumn> = {
 export type BuildProvenance = {
   environment: string;
   gitCommit: string | null;
+  /** Working tree had uncommitted edits — gitCommit is HEAD, not the built content's commit. */
+  dirtyTree?: boolean | undefined;
   sourceHash: string;
   embeddingConfigHash: string;
   /**
@@ -175,10 +177,13 @@ export async function applyPlan(
   opts: {
     clean?: boolean;
     semantic?: { upserts: SemanticUpsert[]; deleteIds: string[] };
+    /** Pre-inserted 'deploying' row to flip to 'active' on success. */
+    deploymentId?: string | undefined;
   } = {},
-): Promise<{ deploymentId: string }> {
-  const deploymentId = newId();
+): Promise<{ deploymentId: string; runtimeRevision: number }> {
+  const deploymentId = opts.deploymentId ?? newId();
   const ns = plan.namespaceId;
+  let runtimeRevision = 0;
 
   await db.transaction(async (tx) => {
     // spec/07: serialize builds per namespace — a concurrent writer waits.
@@ -188,6 +193,9 @@ export async function applyPlan(
       // Wipe runtime rows for this namespace without deleting the
       // namespaces / namespace_runtime_state rows — runtimeRevision must
       // stay monotonic because cache keys embed it (spec/16).
+      // `deployments` rows are audit history, not runtime state: they are
+      // preserved and superseded below so `grounding deployments` can list
+      // prior revisions for rollback (M9).
       await tx
         .update(t.namespaceRuntimeState)
         .set({ activeDeploymentId: null })
@@ -195,14 +203,6 @@ export async function applyPlan(
           and(
             eq(t.namespaceRuntimeState.namespaceId, ns),
             eq(t.namespaceRuntimeState.environment, provenance.environment),
-          ),
-        );
-      await tx
-        .delete(t.deployments)
-        .where(
-          and(
-            eq(t.deployments.namespaceId, ns),
-            eq(t.deployments.environment, provenance.environment),
           ),
         );
       // Deepest entity tables first; child rows cascade via FK.
@@ -297,21 +297,31 @@ export async function applyPlan(
           eq(t.deployments.status, "active"),
         ),
       );
-    await tx.insert(t.deployments).values({
-      id: deploymentId,
-      namespaceId: ns,
-      environment: provenance.environment,
-      gitCommit: provenance.gitCommit,
-      sourceHash: provenance.sourceHash,
-      compilerVersion: COMPILER_VERSION,
-      schemaVersion: SCHEMA_VERSION,
-      status: "active",
-      completedAt: new Date(),
-      metadata: {
-        repository: provenance.repository ?? null,
-        repositoryPathPrefix: provenance.repositoryPathPrefix ?? "",
-      },
-    });
+    if (opts.deploymentId) {
+      // A pre-inserted 'deploying' row (beginDeployment) flips to active —
+      // materialization failure outside this tx leaves it marked 'failed'.
+      await tx
+        .update(t.deployments)
+        .set({ status: "active", completedAt: new Date() })
+        .where(eq(t.deployments.id, deploymentId));
+    } else {
+      await tx.insert(t.deployments).values({
+        id: deploymentId,
+        namespaceId: ns,
+        environment: provenance.environment,
+        gitCommit: provenance.gitCommit,
+        sourceHash: provenance.sourceHash,
+        compilerVersion: COMPILER_VERSION,
+        schemaVersion: SCHEMA_VERSION,
+        status: "active",
+        completedAt: new Date(),
+        metadata: {
+          repository: provenance.repository ?? null,
+          repositoryPathPrefix: provenance.repositoryPathPrefix ?? "",
+          dirtyTree: provenance.dirtyTree ?? false,
+        },
+      });
+    }
     await tx
       .insert(t.namespaceRuntimeState)
       .values({
@@ -334,7 +344,30 @@ export async function applyPlan(
           activeDeploymentId: deploymentId,
           updatedAt: new Date(),
         },
+      })
+      .returning({ runtimeRevision: t.namespaceRuntimeState.runtimeRevision })
+      .then((rows) => {
+        runtimeRevision = Number(rows[0]?.runtimeRevision ?? 0);
       });
+
+    // Entity tables are namespace-global (no env column, spec/08), so a
+    // deploy changes what EVERY environment serves. Cache keys embed the
+    // per-env runtime revision (spec/16) — bump this namespace's other
+    // environment rows too or they would keep serving stale-revision hits
+    // against changed canonical content. Their activeDeploymentId/gitCommit
+    // keep pointing at their own last deployment.
+    await tx
+      .update(t.namespaceRuntimeState)
+      .set({
+        runtimeRevision: sql`${t.namespaceRuntimeState.runtimeRevision} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(t.namespaceRuntimeState.namespaceId, ns),
+          ne(t.namespaceRuntimeState.environment, provenance.environment),
+        ),
+      );
 
     // spec/07 verify stage: confirm the plan landed before committing —
     // any discrepancy throws and rolls the transaction back.
@@ -366,7 +399,111 @@ export async function applyPlan(
     }
   });
 
-  return { deploymentId };
+  return { deploymentId, runtimeRevision };
+}
+
+/**
+ * Insert a 'deploying' deployment row before materialization begins so a
+ * failure is visible in deployment history (status vocabulary, spec/08).
+ * `applyPlan` flips it to 'active' inside the entity transaction; callers
+ * mark it 'failed' via `failDeployment` on error.
+ */
+export async function beginDeployment(
+  db: Database,
+  input: {
+    namespaceId: string;
+    provenance: BuildProvenance;
+    initiatedBy?: string | undefined;
+    /** Compiled namespace row — inserted minimally when missing so the
+     * deployments FK is satisfied on a first deploy into a fresh namespace. */
+    namespaceRow?: { key?: unknown; name?: unknown } | undefined;
+  },
+): Promise<string | null> {
+  const p = input.provenance;
+  const existing = await db
+    .select({ id: t.namespaces.id })
+    .from(t.namespaces)
+    .where(eq(t.namespaces.id, input.namespaceId));
+  if (existing.length === 0) {
+    if (!input.namespaceRow) return null;
+    await db
+      .insert(t.namespaces)
+      .values({
+        id: input.namespaceId,
+        key: String(input.namespaceRow.key),
+        name: String(input.namespaceRow.name),
+      })
+      .onConflictDoNothing();
+  }
+  const id = newId();
+  await db.insert(t.deployments).values({
+    id,
+    namespaceId: input.namespaceId,
+    environment: p.environment,
+    gitCommit: p.gitCommit,
+    sourceHash: p.sourceHash,
+    compilerVersion: COMPILER_VERSION,
+    schemaVersion: SCHEMA_VERSION,
+    status: "deploying",
+    initiatedBy: input.initiatedBy ?? null,
+    metadata: {
+      repository: p.repository ?? null,
+      repositoryPathPrefix: p.repositoryPathPrefix ?? "",
+      dirtyTree: p.dirtyTree ?? false,
+    },
+  });
+  return id;
+}
+
+/** Mark an in-flight deployment row 'failed' with its error message. */
+export async function failDeployment(
+  db: Database,
+  deploymentId: string,
+  error: unknown,
+): Promise<void> {
+  await db
+    .update(t.deployments)
+    .set({
+      status: "failed",
+      completedAt: new Date(),
+      errorMessage: error instanceof Error ? error.message : String(error),
+    })
+    .where(eq(t.deployments.id, deploymentId));
+}
+
+/**
+ * Current entity ids per table for a namespace — the delete baseline for
+ * reconcile-style plans (spec/07: manifest is an optimization only; DB state
+ * is the truth). Includes the namespace row itself.
+ */
+export async function namespaceEntityIds(
+  db: Database,
+  namespaceId: string,
+): Promise<Map<EntityTable, Set<string>>> {
+  const baseline = new Map<EntityTable, Set<string>>();
+  for (const table of Object.keys(ENTITY_TABLE) as EntityTable[]) {
+    const nsCol = NS_COL[table];
+    const rows = await db
+      .select({ id: ID_COL[table] })
+      .from(ENTITY_TABLE[table])
+      .where(nsCol ? eq(nsCol, namespaceId) : eq(ID_COL[table], namespaceId));
+    baseline.set(table, new Set(rows.map((r) => r.id as string)));
+  }
+  return baseline;
+}
+
+/**
+ * Current semantic_entities entity ids for a namespace — the reconcile
+ * baseline for embedding rows. Like `namespaceEntityIds`, DB state is the
+ * truth (ADR-0007): a manifest-less build must still drop embeddings for
+ * entities that lost their semanticText.
+ */
+export async function semanticEntityIds(db: Database, namespaceId: string): Promise<Set<string>> {
+  const rows = await db
+    .select({ id: t.semanticEntities.entityId })
+    .from(t.semanticEntities)
+    .where(eq(t.semanticEntities.namespaceId, namespaceId));
+  return new Set(rows.map((r) => r.id));
 }
 
 export type { CompiledEntity };

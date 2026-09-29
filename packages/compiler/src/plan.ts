@@ -22,6 +22,15 @@ export function planMaterialization(
   entities: CompiledEntity[],
   manifest: Manifest | null,
   current: { embeddingDimensions: number | null } = { embeddingDimensions: null },
+  /**
+   * Current entity ids per table read from the database. When provided it is
+   * the delete baseline — the manifest only tracks what *this* checkout last
+   * built, so manifest-less or drifted states must still prune DB rows that
+   * the compiled revision no longer contains (spec/07: manifest deletion must
+   * not compromise correctness; needed for immutable-revision deploys and
+   * rollback to older revisions).
+   */
+  dbBaseline?: Map<EntityTable, Set<string>>,
 ): MaterializationPlan {
   const stale =
     manifest === null ||
@@ -45,9 +54,13 @@ export function planMaterialization(
           previous[e.id]?.lexicalHash !== e.lexicalHash,
       );
 
-  const deletes = Object.entries(previous)
-    .filter(([id]) => !nextIds.has(id))
-    .map(([id, e]) => ({ id, table: e.table as EntityTable }));
+  const deletes = dbBaseline
+    ? [...dbBaseline.entries()].flatMap(([table, ids]) =>
+        [...ids].filter((id) => !nextIds.has(id)).map((id) => ({ id, table })),
+      )
+    : Object.entries(previous)
+        .filter(([id]) => !nextIds.has(id))
+        .map(([id, e]) => ({ id, table: e.table as EntityTable }));
 
   const byOrder = (t: EntityTable) => TABLE_ORDER[t] ?? 99;
   upserts.sort((a, b) => byOrder(a.table) - byOrder(b.table) || a.id.localeCompare(b.id));

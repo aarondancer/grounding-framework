@@ -28,6 +28,10 @@
         "@grounding/source": "workspace:*",
         "chokidar": "5.0.0",
         "commander": "15.0.0",
+        "drizzle-orm": "0.45.3",
+      },
+      "devDependencies": {
+        "@grounding/test-support": "workspace:*",
       },
     },
     "apps/web": {
@@ -266,6 +270,20 @@
         "@grounding/embeddings": "workspace:*",
         "@grounding/source": "workspace:*",
         "drizzle-orm": "0.45.3",
+      },
+    },
+    "tests/bench": {
+      "name": "@grounding/bench",
+      "version": "0.0.0",
+      "dependencies": {
+        "@grounding/assembly": "workspace:*",
+        "@grounding/cache": "workspace:*",
+        "@grounding/compiler": "workspace:*",
+        "@grounding/core": "workspace:*",
+        "@grounding/db": "workspace:*",
+        "@grounding/embeddings": "workspace:*",
+        "@grounding/retrieval": "workspace:*",
+        "@grounding/source": "workspace:*",
       },
     },
     "tests/e2e": {
@@ -525,6 +543,8 @@
     "@graphql-yoga/typed-event-target": ["@graphql-yoga/typed-event-target@3.0.3", "", { "dependencies": { "@repeaterjs/repeater": "^3.0.4", "tslib": "^2.8.1" } }, "sha512-j/EgVfZSzKA2lVeiZ0un8E2eVIqWa9Woyqta4A40ht1M93ui9CDVHU6pmphoQTpFa92BNbMVexXdOtMQk8LCjA=="],
 
     "@grounding/assembly": ["@grounding/assembly@workspace:packages/assembly"],
+
+    "@grounding/bench": ["@grounding/bench@workspace:tests/bench"],
 
     "@grounding/cache": ["@grounding/cache@workspace:packages/cache"],
 

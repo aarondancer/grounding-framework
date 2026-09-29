@@ -15,8 +15,12 @@ import { COMPILER_VERSION, readManifest, saveManifest, writeManifest } from "./m
 import {
   applyPlan,
   type BuildProvenance,
+  beginDeployment,
   checkEmbeddingDimension,
+  failDeployment,
+  namespaceEntityIds,
   type SemanticUpsert,
+  semanticEntityIds,
 } from "./materialize.ts";
 import { type MaterializationPlan, planMaterialization } from "./plan.ts";
 
@@ -35,6 +39,8 @@ export type BuildOptions = {
   provider?: EmbeddingProvider | undefined;
   /** Valkey embedding-content cache; absent → provider called directly. */
   cache?: RuntimeCache | null | undefined;
+  /** Recorded on the deployment row (`deployments.initiated_by`). */
+  initiatedBy?: string | undefined;
 };
 
 /** semantic_entities.entity_type per entity table (spec/08). */
@@ -51,6 +57,8 @@ export type BuildResult = {
   diagnostics: Diagnostic[];
   plan: MaterializationPlan | null;
   deploymentId: string | null;
+  /** New namespace runtime revision after a successful apply (spec/16). */
+  runtimeRevision: number | null;
   sourceHash: string;
 };
 
@@ -63,6 +71,21 @@ function gitCommit(root: string): string | null {
     }).trim();
   } catch {
     return null;
+  }
+}
+
+/** True when the grounding root has uncommitted changes (HEAD ≠ built content). */
+function gitDirty(root: string): boolean {
+  try {
+    return (
+      execSync("git status --porcelain", {
+        cwd: root,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim().length > 0
+    );
+  } catch {
+    return false;
   }
 }
 
@@ -92,7 +115,15 @@ export async function build(
   const diagnostics: Diagnostic[] = [...loaded.diagnostics];
 
   const invalid = diagnostics.some((d) => d.severity === "error");
-  if (invalid) return { ok: false, diagnostics, plan: null, deploymentId: null, sourceHash: "" };
+  if (invalid)
+    return {
+      ok: false,
+      diagnostics,
+      plan: null,
+      deploymentId: null,
+      runtimeRevision: null,
+      sourceHash: "",
+    };
 
   const validated = validateTree(
     {
@@ -105,13 +136,27 @@ export async function build(
   );
   diagnostics.push(...validated.diagnostics);
   if (validated.diagnostics.some((d) => d.severity === "error")) {
-    return { ok: false, diagnostics, plan: null, deploymentId: null, sourceHash: "" };
+    return {
+      ok: false,
+      diagnostics,
+      plan: null,
+      deploymentId: null,
+      runtimeRevision: null,
+      sourceHash: "",
+    };
   }
 
   const compiled = compileTree(loaded);
   diagnostics.push(...compiled.diagnostics);
   if (!compiled.namespaceId || compiled.diagnostics.some((d) => d.severity === "error")) {
-    return { ok: false, diagnostics, plan: null, deploymentId: null, sourceHash: "" };
+    return {
+      ok: false,
+      diagnostics,
+      plan: null,
+      deploymentId: null,
+      runtimeRevision: null,
+      sourceHash: "",
+    };
   }
 
   const environment = opts.environment ?? process.env.GROUNDING_ENV ?? "local";
@@ -136,23 +181,49 @@ export async function build(
     const check = await checkEmbeddingDimension(db, embeddingDimensions);
     if (typeof check !== "number") {
       diagnostics.push(check);
-      return { ok: false, diagnostics, plan: null, deploymentId: null, sourceHash: "" };
+      return {
+        ok: false,
+        diagnostics,
+        plan: null,
+        deploymentId: null,
+        runtimeRevision: null,
+        sourceHash: "",
+      };
     }
   }
 
   const manifest = opts.clean ? null : readManifest(root);
-  const plan = planMaterialization(compiled.namespaceId, compiled.entities, manifest, {
-    embeddingDimensions: embeddingDimensions ?? null,
-  });
+  // Deletes reconcile against actual DB state, not the manifest — the
+  // manifest only tracks this checkout's last build, so deploys of a
+  // different Git revision (or a deleted manifest) must still prune rows
+  // the compiled revision no longer contains (spec/07 invariant).
+  const dbBaseline = opts.clean ? null : await namespaceEntityIds(db, compiled.namespaceId);
+  const plan = planMaterialization(
+    compiled.namespaceId,
+    compiled.entities,
+    manifest,
+    {
+      embeddingDimensions: embeddingDimensions ?? null,
+    },
+    dbBaseline ?? undefined,
+  );
 
   if (opts.dryRun) {
-    return { ok: true, diagnostics, plan, deploymentId: null, sourceHash: compiled.sourceHash };
+    return {
+      ok: true,
+      diagnostics,
+      plan,
+      deploymentId: null,
+      runtimeRevision: null,
+      sourceHash: compiled.sourceHash,
+    };
   }
 
   const repository = loaded.config?.repository;
   const provenance: BuildProvenance = {
     environment,
     gitCommit: gitCommit(root),
+    dirtyTree: gitCommit(root) !== null ? gitDirty(root) : undefined,
     sourceHash: compiled.sourceHash,
     embeddingConfigHash,
     repository:
@@ -166,13 +237,26 @@ export async function build(
   // embeddings (spec: priority-only edits must not recompute). The Valkey
   // embedding-content cache absorbs cross-build repeats.
   const semanticDeleteIds = new Set(plan.deletes.map((d) => d.id));
-  const embedWork = plan.upserts.filter((e) => {
-    // entity-level semanticHash is only set when semantic text exists.
-    const semantic = SEMANTIC_ENTITY_TYPE[e.table] !== undefined && e.semanticHash !== undefined;
-    const hadSemantic = manifest?.entities[e.id]?.semanticHash !== undefined;
-    if (!semantic && hadSemantic) semanticDeleteIds.add(e.id); // semantic text removed
-    return semantic && manifest?.entities[e.id]?.semanticHash !== e.semanticHash;
-  });
+  if (!opts.clean) {
+    // DB state is the truth for embedding rows too (ADR-0007): a
+    // manifest-less build cannot see an entity that lost its semanticText,
+    // so reconcile semantic_entities against the compiled target set.
+    const target = new Set(
+      compiled.entities
+        .filter((e) => SEMANTIC_ENTITY_TYPE[e.table] !== undefined && e.semanticHash !== undefined)
+        .map((e) => e.id),
+    );
+    for (const id of await semanticEntityIds(db, compiled.namespaceId)) {
+      if (!target.has(id)) semanticDeleteIds.add(id);
+    }
+  }
+  const embedWork = plan.upserts.filter(
+    (e) =>
+      // entity-level semanticHash is only set when semantic text exists.
+      SEMANTIC_ENTITY_TYPE[e.table] !== undefined &&
+      e.semanticHash !== undefined &&
+      manifest?.entities[e.id]?.semanticHash !== e.semanticHash,
+  );
 
   const semanticUpserts: SemanticUpsert[] = [];
   if (!("embed" in resolvedProvider)) {
@@ -180,7 +264,14 @@ export async function build(
     // corpus with nothing to embed just carries the diagnostic forward.
     diagnostics.push({ ...resolvedProvider, severity: embedWork.length > 0 ? "error" : "warning" });
     if (embedWork.length > 0) {
-      return { ok: false, diagnostics, plan, deploymentId: null, sourceHash: compiled.sourceHash };
+      return {
+        ok: false,
+        diagnostics,
+        plan,
+        deploymentId: null,
+        runtimeRevision: null,
+        sourceHash: compiled.sourceHash,
+      };
     }
   }
   if (embedWork.length > 0 && "embed" in resolvedProvider) {
@@ -210,6 +301,7 @@ export async function build(
             diagnostics,
             plan,
             deploymentId: null,
+            runtimeRevision: null,
             sourceHash: compiled.sourceHash,
           };
         }
@@ -227,17 +319,55 @@ export async function build(
         code: RuntimeErrorCode.EMBEDDING_UNAVAILABLE,
         message: err instanceof Error ? err.message : String(err),
       });
-      return { ok: false, diagnostics, plan, deploymentId: null, sourceHash: compiled.sourceHash };
+      return {
+        ok: false,
+        diagnostics,
+        plan,
+        deploymentId: null,
+        runtimeRevision: null,
+        sourceHash: compiled.sourceHash,
+      };
     }
   }
 
-  const { deploymentId } = await applyPlan(db, plan, provenance, {
-    clean: opts.clean ?? false,
-    semantic: {
-      upserts: semanticUpserts,
-      deleteIds: [...semanticDeleteIds],
-    },
+  // Record the deployment before the entity transaction so failures are
+  // auditable (`deployments` status vocabulary, spec/08). The 'deploying'
+  // row flips to 'active' inside applyPlan's transaction.
+  const pendingDeploymentId = await beginDeployment(db, {
+    namespaceId: compiled.namespaceId,
+    provenance,
+    initiatedBy: opts.initiatedBy,
+    namespaceRow: compiled.entities.find((e) => e.table === "namespaces")?.row as
+      | { key?: unknown; name?: unknown }
+      | undefined,
   });
+  let deploymentId: string;
+  let runtimeRevision: number;
+  try {
+    ({ deploymentId, runtimeRevision } = await applyPlan(db, plan, provenance, {
+      clean: opts.clean ?? false,
+      semantic: {
+        upserts: semanticUpserts,
+        deleteIds: [...semanticDeleteIds],
+      },
+      deploymentId: pendingDeploymentId ?? undefined,
+    }));
+  } catch (err) {
+    if (pendingDeploymentId) await failDeployment(db, pendingDeploymentId, err).catch(() => {});
+    diagnostics.push({
+      severity: "error",
+      code: RuntimeErrorCode.INTERNAL_ERROR,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return {
+      ok: false,
+      diagnostics,
+      plan,
+      deploymentId: pendingDeploymentId,
+      runtimeRevision: null,
+      sourceHash: compiled.sourceHash,
+    };
+  }
 
   const nextManifest = writeManifest(root, {
     entities: compiled.entities,
@@ -248,7 +378,14 @@ export async function build(
   });
   saveManifest(root, nextManifest);
 
-  return { ok: true, diagnostics, plan, deploymentId, sourceHash: compiled.sourceHash };
+  return {
+    ok: true,
+    diagnostics,
+    plan,
+    deploymentId,
+    runtimeRevision,
+    sourceHash: compiled.sourceHash,
+  };
 }
 
 export type { MaterializationPlan };

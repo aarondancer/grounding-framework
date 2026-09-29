@@ -17,6 +17,8 @@
     "typecheck": "bun run --filter='*' typecheck",
     "migrate": "bun run --filter='@grounding/db' migrate",
     "eval": "bun apps/cli/src/index.ts eval",
+    "grounding": "bun apps/cli/src/index.ts",
+    "bench": "bun tests/bench/bench.ts",
     "compose:up": "docker compose -f ops/compose.yaml up -d",
     "compose:down": "docker compose -f ops/compose.yaml down",
     "prepare": "husky"

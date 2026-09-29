@@ -364,6 +364,7 @@ describe("embeddings + lexical indexing (real postgres)", () => {
 describe("materialization (real postgres)", () => {
   const it = dbTest;
   const NS = "019e0000-0000-7000-8000-000000000001";
+  const NS2 = "019e1000-0000-7000-8000-000000000001";
 
   it("clean build materializes, then a rebuild converges to zero work", async () => {
     const { connect } = await import("@grounding/db");
@@ -389,6 +390,78 @@ describe("materialization (real postgres)", () => {
       expect(second.plan?.deletes).toEqual([]);
     } finally {
       await db.execute(sql`delete from namespaces where id = ${NS}`);
+      await pool.end();
+    }
+  });
+
+  it("incremental builds converge to clean-build state (spec/07 equivalence)", async () => {
+    const { connect } = await import("@grounding/db");
+    const { sql } = await import("drizzle-orm");
+    const { namespaceEntityIds } = await import("./materialize.ts");
+    const { writeFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { pool, db } = connect();
+
+    const snapshot = async () => {
+      const ids = await namespaceEntityIds(db, NS2);
+      const semantic = await db.execute<{ entity_id: string; semantic_hash: string }>(
+        sql`select entity_id, semantic_hash from semantic_entities
+            where namespace_id = ${NS2} order by entity_id`,
+      );
+      return {
+        entities: [...ids.entries()].map(([t, s]) => [t, [...s].sort()] as const).sort(),
+        semantic: semantic.rows,
+      };
+    };
+
+    try {
+      const { dir } = corpus(
+        {
+          "namespace.jsonc": `{"id":"${NS2}","key":"it-equiv","name":"EQ","defaultRetrievalProfile":"default"}`,
+        },
+        "019e1000",
+      );
+      const provider = deterministicProvider(1536);
+      const first = await build(dir, db, { clean: true, provider });
+      expect(first.ok).toBe(true);
+
+      // Incremental edits: rename a concept, delete `other` (a semantic
+      // entity — its embedding row must be pruned), add a new concept,
+      // empty the relation file so the source stays valid. ("Losing"
+      // semanticText isn't authorable — every semantic-capable schema
+      // requires it — so removal is exercised through entity deletion.)
+      writeFileSync(
+        join(dir, "concepts/pipeline.jsonc"),
+        `{"id":"019e1000-0000-7000-8000-000000000020","key":"pipeline","name":"Pipeline Renamed","status":"published","domains":["sales"]}`,
+      );
+      const { rmSync } = await import("node:fs");
+      rmSync(join(dir, "concepts/other.jsonc"));
+      writeFileSync(join(dir, "relations/main.jsonc"), `{"relations":[]}`);
+      writeFileSync(
+        join(dir, "concepts/new.jsonc"),
+        `{"id":"019e1000-0000-7000-8000-000000000090","key":"added","name":"Added","status":"published"}`,
+      );
+      const incremental = await build(dir, db, { provider });
+      expect(incremental.ok).toBe(true);
+      expect(incremental.plan?.full).toBe(false);
+      const afterIncremental = await snapshot();
+
+      // Manifest loss must not compromise correctness (spec/07) — this is
+      // the deploy/rollback path, where the worktree has no .grounding/.
+      rmSync(join(dir, ".grounding/manifest.json"));
+      const manifestless = await build(dir, db, { provider });
+      expect(manifestless.ok).toBe(true);
+      const afterManifestless = await snapshot();
+      expect(afterManifestless).toEqual(afterIncremental);
+
+      // Clean rebuild of the identical source must produce identical state.
+      const clean = await build(dir, db, { clean: true, provider });
+      expect(clean.ok).toBe(true);
+      const afterClean = await snapshot();
+
+      expect(afterIncremental).toEqual(afterClean);
+    } finally {
+      await db.execute(sql`delete from namespaces where id = ${NS2}`);
       await pool.end();
     }
   });
