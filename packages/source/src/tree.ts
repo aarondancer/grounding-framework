@@ -1,5 +1,5 @@
 import type { Diagnostic } from "@grounding/core";
-import { SourceErrorCode } from "@grounding/core";
+import { isUuidV7, SourceErrorCode } from "@grounding/core";
 import type { SourceFile } from "./discover.ts";
 import type { DerivedChunk, MarkdownSection } from "./markdown.ts";
 
@@ -70,6 +70,15 @@ export class EntityIndex {
 
   add(entity: SourceEntity): void {
     if (entity.id !== undefined) {
+      // spec/02 + plan M2: authored first-class ids must be UUIDv7.
+      if (!isUuidV7(entity.id)) {
+        this.diagnostics.push({
+          severity: "error",
+          code: SourceErrorCode.SCHEMA_VALIDATION_FAILED,
+          message: `id ${entity.id} is not a UUIDv7 (authored entities must carry UUIDv7 ids)`,
+          location: { path: entity.path, pointer: "/id" },
+        });
+      }
       const prior = this.byId.get(entity.id);
       if (prior) {
         this.diagnostics.push({

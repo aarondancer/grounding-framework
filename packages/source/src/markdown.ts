@@ -92,6 +92,8 @@ export type MarkdownSection = {
   explicitId: string | null;
   /** Stable structural key: explicit ID or derived heading-path slug; intro is "intro". */
   key: string;
+  /** Rendered heading texts from the root down to this section (excl. H1). */
+  path: string[];
   /** File offsets into the normalized body, covering the whole section subtree. */
   start: number;
   end: number;
@@ -225,6 +227,7 @@ export function buildSections(body: string, path: string, bodyLine = 0): Section
       heading: null,
       explicitId: null,
       key: "intro",
+      path: [],
       start: 0,
       end: introEnd,
       childrenStart: introEnd,
@@ -267,6 +270,7 @@ export function buildSections(body: string, path: string, bodyLine = 0): Section
       heading: e.rawText,
       explicitId: e.explicitId,
       key,
+      path: [...pathForKey, e.rawText],
       start: e.start,
       end: extentEnd,
       childrenStart: extentEnd,

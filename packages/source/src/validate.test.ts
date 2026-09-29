@@ -125,6 +125,13 @@ describe("registry integrity", () => {
       }),
     ).toContain("error:DUPLICATE_KEY");
   });
+  test("non-v7 authored id → SCHEMA_VALIDATION_FAILED", () => {
+    expect(
+      codes({
+        "concepts/other.jsonc": `{"id":"3f7c2a10-9b4e-4f1a-8c2d-5e6f7a8b9c0d","key":"other","name":"O"}`,
+      }),
+    ).toContain("error:SCHEMA_VALIDATION_FAILED");
+  });
   test("unresolvable ref → REFERENCE_NOT_FOUND", () => {
     expect(
       codes({

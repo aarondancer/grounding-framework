@@ -19,6 +19,8 @@ export type LoadResult = {
   diagnostics: Diagnostic[];
   /** Parsed config value (grounding.config.jsonc). */
   config: Record<string, unknown> | null;
+  /** Markdown body text per file (knowledge + prompt-fragment). */
+  bodies: Map<string, string>;
 };
 
 const DEFAULT_MAX_CHARS = 6000;
@@ -28,6 +30,7 @@ export function loadSourceTree(startDir: string): LoadResult {
   const diagnostics: Diagnostic[] = [];
   const entities: SourceEntity[] = [];
   const knowledge: KnowledgeDocument[] = [];
+  const bodies = new Map<string, string>();
 
   if (!root) {
     diagnostics.push({
@@ -36,7 +39,7 @@ export function loadSourceTree(startDir: string): LoadResult {
       message: `no ${"grounding.config.jsonc"} found walking up from ${startDir}`,
       location: { path: startDir },
     });
-    return { root: null, entities, knowledge, diagnostics, config: null };
+    return { root: null, entities, knowledge, diagnostics, config: null, bodies };
   }
 
   // Always load the whole tree — reference resolution needs the full
@@ -63,6 +66,7 @@ export function loadSourceTree(startDir: string): LoadResult {
     if (file.kind === "knowledge" || file.kind === "prompt-fragment") {
       const md = parseMarkdownSource(text, file.path);
       diagnostics.push(...md.diagnostics);
+      bodies.set(file.path, md.body);
       const schemaDiags = schemaValidate(file.kind, md.frontmatter.value, file.path, {
         tree: md.frontmatter.tree,
         text: md.frontmatter.text,
@@ -112,7 +116,7 @@ export function loadSourceTree(startDir: string): LoadResult {
     }
   }
 
-  return { root, entities, knowledge, diagnostics, config };
+  return { root, entities, knowledge, diagnostics, config, bodies };
 }
 
 function getChunkLimit(config: Record<string, unknown> | null): number {
