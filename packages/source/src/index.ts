@@ -1,5 +1,7 @@
 // Public surface of the source package: discovery, loading, semantic
-// validation. Parser internals (jsonc/markdown/schemas) stay private.
+// validation, plus the jsonc/markdown/schema parse primitives needed by
+// hosts that resolve config themselves (e.g. the web server resolving the
+// embedding provider before compile).
 
 export type { SourceFile, SourceKind } from "./discover.ts";
 export {
@@ -8,6 +10,8 @@ export {
   findGroundingRoot,
   GROUNDING_CONFIG_NAME,
 } from "./discover.ts";
+export type { JsoncParseResult } from "./jsonc.ts";
+export { parseJsonc } from "./jsonc.ts";
 export type { LoadResult } from "./load.ts";
 export { loadSourceTree } from "./load.ts";
 export type { DerivedChunk, MarkdownParseResult, MarkdownSection } from "./markdown.ts";

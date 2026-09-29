@@ -7,14 +7,24 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "codegen": "graphql-codegen --config codegen.ts"
   },
   "dependencies": {
     "@grounding/assembly": "workspace:*",
     "@grounding/core": "workspace:*",
     "@grounding/db": "workspace:*",
     "@grounding/retrieval": "workspace:*",
+    "drizzle-orm": "0.45.3",
     "graphql": "16.14.2",
     "graphql-yoga": "5.24.1"
+  },
+  "devDependencies": {
+    "@graphql-codegen/cli": "^7.4.3",
+    "@graphql-codegen/typescript": "^6.1.0",
+    "@graphql-codegen/typescript-resolvers": "^6.1.0",
+    "@grounding/compiler": "workspace:*",
+    "@grounding/embeddings": "workspace:*",
+    "@grounding/source": "workspace:*"
   }
 }

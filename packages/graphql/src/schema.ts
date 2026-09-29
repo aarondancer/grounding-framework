@@ -1,10 +1,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { GroundingError, RuntimeErrorCode } from "@grounding/core";
+import { type Diagnostic, GroundingError, RuntimeErrorCode } from "@grounding/core";
 import { GraphQLError } from "graphql";
 import { createSchema, type GraphQLSchemaWithContext } from "graphql-yoga";
-import type { GraphQLContext, ServiceContext } from "./context.ts";
+import type { GraphQLContext } from "./context.ts";
+import { buildResolvers } from "./resolvers.ts";
 import { DateTimeScalar, JSONScalar, LongScalar } from "./scalars.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -36,56 +37,18 @@ export function loadSDL(): string {
   return readFileSync(schemaPath(), "utf8");
 }
 
-function notImplemented(name: string): never {
-  throw new GroundingError(RuntimeErrorCode.INTERNAL_ERROR, `${name} is not implemented yet`);
-}
-
-export function buildSchema(services: ServiceContext): GraphQLSchemaWithContext<GraphQLContext> {
+/**
+ * SDL + resolver map. Services flow through the per-request context
+ * (ServiceContext in context.ts), so schema building takes no deps.
+ */
+export function buildSchema(): GraphQLSchemaWithContext<GraphQLContext> {
   return createSchema<GraphQLContext>({
     typeDefs: loadSDL(),
     resolvers: {
       JSON: JSONScalar,
       DateTime: DateTimeScalar,
       Long: LongScalar,
-      Query: {
-        runtimeInfo: () => {
-          if (!services.db) {
-            throw new GroundingError(RuntimeErrorCode.INTERNAL_ERROR, "database not configured");
-          }
-          // Minimal M0 runtime info; full deployment state lands with the compiler.
-          return {
-            namespace: { id: "unknown", key: "unknown" },
-            environment: services.environment,
-            runtimeRevision: 0,
-            gitCommit: null,
-            sourceHash: "unknown",
-            compilerVersion: null,
-          };
-        },
-        retrieve: () => notImplemented("retrieve"),
-        resolveConcepts: () => notImplemented("resolveConcepts"),
-        assembleAgent: () => notImplemented("assembleAgent"),
-        namespace: () => notImplemented("namespace"),
-        concepts: () => notImplemented("concepts"),
-        concept: () => notImplemented("concept"),
-        ontologyNeighborhood: () => notImplemented("ontologyNeighborhood"),
-        domains: () => notImplemented("domains"),
-        knowledgeItems: () => notImplemented("knowledgeItems"),
-        knowledgeItem: () => notImplemented("knowledgeItem"),
-        knowledgeChunk: () => notImplemented("knowledgeChunk"),
-        dimensions: () => notImplemented("dimensions"),
-        dimension: () => notImplemented("dimension"),
-        selectionGroups: () => notImplemented("selectionGroups"),
-        retrievalProfiles: () => notImplemented("retrievalProfiles"),
-        agentTemplates: () => notImplemented("agentTemplates"),
-        agentTemplate: () => notImplemented("agentTemplate"),
-        skills: () => notImplemented("skills"),
-        skill: () => notImplemented("skill"),
-        tools: () => notImplemented("tools"),
-        tool: () => notImplemented("tool"),
-        promptFragments: () => notImplemented("promptFragments"),
-        promptFragment: () => notImplemented("promptFragment"),
-      },
+      ...buildResolvers(),
     },
   });
 }
@@ -99,6 +62,28 @@ export function toGraphQLError(error: unknown): GraphQLError {
   const extCode = (original as { extensions?: { code?: unknown } })?.extensions?.code;
   if (typeof extCode === "string" && original instanceof GraphQLError) {
     return original;
+  }
+  // Service request errors (retrieval/assembly) carry a diagnostic list;
+  // the first error-severity diagnostic's registry code becomes
+  // extensions.code and the full list is exposed under extensions.diagnostics
+  // (services already redact unauthorized identity — spec/11).
+  const diagnostics = (original as { diagnostics?: Diagnostic[] })?.diagnostics;
+  if (Array.isArray(diagnostics) && diagnostics.length > 0) {
+    const primary =
+      diagnostics.find((d) => d.severity === "error")?.code ??
+      diagnostics[0]?.code ??
+      RuntimeErrorCode.INTERNAL_ERROR;
+    return new GraphQLError(original instanceof Error ? original.message : "request failed", {
+      extensions: {
+        code: primary,
+        diagnostics: diagnostics.map((d) => ({
+          severity: d.severity,
+          code: d.code,
+          message: d.message,
+          ...(d.location ? { location: d.location } : {}),
+        })),
+      },
+    });
   }
   if (original instanceof GroundingError) {
     return new GraphQLError(original.message, {

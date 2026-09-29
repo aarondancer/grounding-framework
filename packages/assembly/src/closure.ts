@@ -100,7 +100,7 @@ export function resolveClosure(input: ClosureInput): ClosureResult {
     let changed = false;
     for (const id of considered) {
       const v = verdicts.get(id);
-      if (!v || !v.usable) continue;
+      if (!v?.usable) continue;
       for (const e of edgesBySource.get(id) ?? []) {
         if (e.requirement === "required" && verdicts.get(e.targetToolId)?.usable === false) {
           v.usable = false;

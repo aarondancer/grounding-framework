@@ -1,4 +1,7 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
+// Includes start-client-core's module augmentation (route `server`
+// handlers on file routes) in the typecheck program.
+import "@tanstack/react-start";
 import type { ReactNode } from "react";
 import stylesUrl from "../styles.css?url";
 
