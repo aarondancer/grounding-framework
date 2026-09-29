@@ -77,7 +77,7 @@ export class RetrievalRequestError extends Error {
   }
 }
 
-type NamespaceRow = { id: string; key: string };
+export type NamespaceRow = { id: string; key: string };
 
 const CHANNEL_IDS = ["vector", "fullText", "trigram", "conceptLinked", "graphLinked"] as const;
 
@@ -187,7 +187,20 @@ export async function retrieve(
       input: {
         environment,
         query: request.query,
-        context: [...context.entries()].sort(([a], [b]) => (a < b ? -1 : 1)),
+        // Multi-valued dimensions are sets — sort array values so equivalent
+        // contexts canonicalize identically (spec/16).
+        context: [...context.entries()]
+          .map(([k, v]) => {
+            const canon = Array.isArray(v)
+              ? [...v].sort((a, b) => {
+                  const sa = JSON.stringify(a);
+                  const sb = JSON.stringify(b);
+                  return sa < sb ? -1 : sa > sb ? 1 : 0;
+                })
+              : v;
+            return [k, canon] as [string, unknown];
+          })
+          .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
         profile,
         filters,
         limits: request.limits ?? null,
@@ -262,7 +275,10 @@ export async function resolveConceptsForNamespace(
 // Pipeline internals
 // ---------------------------------------------------------------------------
 
-async function resolveNamespace(db: Database, key: string | undefined): Promise<NamespaceRow> {
+export async function resolveNamespace(
+  db: Database,
+  key: string | undefined,
+): Promise<NamespaceRow> {
   if (key !== undefined) {
     const rows = await db.execute(
       sql`select id, key from namespaces where key = ${key} or id::text = ${key} order by (key = ${key}) desc limit 1`,
@@ -300,7 +316,11 @@ async function resolveNamespace(db: Database, key: string | undefined): Promise<
   ]);
 }
 
-async function runtimeRevision(db: Database, namespaceId: string, environment: string) {
+export async function runtimeRevision(
+  db: Database,
+  namespaceId: string,
+  environment: string,
+): Promise<number> {
   const rows = await db.execute(sql`
     select runtime_revision as rev from namespace_runtime_state
     where namespace_id = ${namespaceId} and environment = ${environment}

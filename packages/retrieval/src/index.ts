@@ -1,4 +1,11 @@
+export { resolveConcepts } from "./concepts.ts";
 export * from "./profile.ts";
-export type { RetrievalServices } from "./retrieve.ts";
-export { RetrievalRequestError, resolveConceptsForNamespace, retrieve } from "./retrieve.ts";
+export type { NamespaceRow, RetrievalServices } from "./retrieve.ts";
+export {
+  RetrievalRequestError,
+  resolveConceptsForNamespace,
+  resolveNamespace,
+  retrieve,
+  runtimeRevision,
+} from "./retrieve.ts";
 export * from "./types.ts";
