@@ -32,6 +32,13 @@ Paths below are under `implementation-reference/`. Read the file for the branch 
 - Local services: `docker compose -f ops/compose.yaml up -d` (Postgres 17 + pgvector, Valkey; details in `ops/README.md`).
 - This repo is an OpenKnowledge project (`.ok/`): route `.md` reads/writes through the `open-knowledge` MCP tools (`exec`, `search`, `write`, `edit`), never native file tools — the `open-knowledge` project skill carries the full contract.
 
+## Verifying while you work
+
+- **Run the type checker continuously, not just at the end.** While implementing, re-run `bun run typecheck` (or the package-scoped `tsc -p <pkg>/tsconfig.json --noEmit`) after each meaningful change — treat it as the compile step, not a final gate. Where a TypeScript language server is available (e.g. `typescript-language-server` in editor/agent tooling), prefer its diagnostics over ad-hoc checking so errors surface at the edit site.
+- Standard gates before claiming work done: `bun run lint`, `bun run typecheck`, `bun test`, `bun run --filter='@grounding/web' build`. A pre-commit hook runs lint + typecheck; keep it fast and honest rather than bypassing it.
+- `apps/web` typecheck first runs `tsr generate` — `routeTree.gen.ts` is a build artifact, never edited by hand and not committed.
+- **After every push, check CI.** `gh run list --limit 5`, then `gh run watch` or `gh run view --log-failed` on failure. Do not report a push as done until the `ci` workflow is green — if it failed, fix and push again in the same task.
+
 ## Design language
 
 Design **deep modules** — a lot of behaviour behind a small interface, at a clean seam, tested through that interface. The shared vocabulary (module, interface, seam, adapter, depth, leverage, locality) is normative: `docs/codebase-design/README.md`. Reach for it whenever code is being designed, restructured, or named.

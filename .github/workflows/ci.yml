@@ -6,13 +6,11 @@ on:
   pull_request:
 
 jobs:
-  test:
+  # Fast static checks — no services, fails fast on lint/type errors.
+  quality:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Start PostgreSQL + Valkey
-        run: docker compose -f ops/compose.yaml up -d --wait
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -26,6 +24,22 @@ jobs:
 
       - name: Typecheck
         run: bun run typecheck
+
+  # Integration: real Postgres + Valkey, tests, production build, boot smoke.
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start PostgreSQL + Valkey
+        run: docker compose -f ops/compose.yaml up -d --wait
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - name: Install
+        run: bun install --frozen-lockfile
 
       - name: Migrate
         run: bun run migrate
