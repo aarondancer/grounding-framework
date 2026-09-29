@@ -13,6 +13,8 @@
     "@grounding/cache": "workspace:*",
     "@grounding/core": "workspace:*",
     "@grounding/db": "workspace:*",
-    "@grounding/embeddings": "workspace:*"
+    "@grounding/compiler": "workspace:*",
+    "@grounding/embeddings": "workspace:*",
+    "drizzle-orm": "0.45.3"
   }
 }

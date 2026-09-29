@@ -156,9 +156,11 @@
       "version": "0.0.0",
       "dependencies": {
         "@grounding/cache": "workspace:*",
+        "@grounding/compiler": "workspace:*",
         "@grounding/core": "workspace:*",
         "@grounding/db": "workspace:*",
         "@grounding/embeddings": "workspace:*",
+        "drizzle-orm": "0.45.3",
       },
     },
     "packages/server": {

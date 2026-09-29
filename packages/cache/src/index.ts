@@ -8,6 +8,7 @@ export {
   ContentCacheKind,
   contentKey,
   DEFAULT_TTLS_MS,
+  LEASE_TTL_MS,
   leaseKey,
   revisionedKey,
 } from "./keys.ts";

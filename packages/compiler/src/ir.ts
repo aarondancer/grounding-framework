@@ -1,5 +1,11 @@
 import type { Diagnostic } from "@grounding/core";
-import { deriveId, hashObject, normalizeForLexical, SourceErrorCode } from "@grounding/core";
+import {
+  deriveId,
+  estimateTokens,
+  hashObject,
+  normalizeForLexical,
+  SourceErrorCode,
+} from "@grounding/core";
 import type { EntityKind, KnowledgeDocument, LoadResult, SourceEntity } from "@grounding/source";
 import { EntityIndex } from "@grounding/source";
 import { SQL, sql } from "drizzle-orm";
@@ -980,6 +986,7 @@ function compileKnowledgeItem(
         selectionGroupId,
         authorizationExpression: d.authorization ?? null,
         applicabilityExpression: d.applicability ?? null,
+        tokenCount: estimateTokens(chunk.content),
         searchText: [weightAText, chunk.content, weightCText]
           .filter((s) => s.length > 0)
           .join("\n"),

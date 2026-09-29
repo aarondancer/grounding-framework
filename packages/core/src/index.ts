@@ -5,5 +5,7 @@ export * from "./expressions.ts";
 export * from "./hashing.ts";
 export * from "./ids.ts";
 export * from "./normalize.ts";
+export * from "./packing.ts";
+export * from "./rrf.ts";
 export * from "./rules.ts";
 export * from "./timings.ts";
