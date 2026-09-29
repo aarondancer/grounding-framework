@@ -1,0 +1,667 @@
+scalar JSON
+scalar DateTime
+scalar Long
+
+enum LifecycleStatus {
+  DRAFT
+  PUBLISHED
+  DEPRECATED
+}
+enum ConceptMatchType {
+  EXACT_KEY
+  EXACT_NAME
+  EXACT_ALIAS
+  LEXICAL
+  TRIGRAM
+  SEMANTIC
+}
+enum SelectionGroupMode {
+  HIGHEST_PRIORITY
+  MOST_SPECIFIC
+  ALL
+}
+enum ToolDependencyRequirement {
+  REQUIRED
+  OPTIONAL
+}
+enum ToolRisk {
+  READ
+  WRITE
+  DESTRUCTIVE
+  PRIVILEGED
+}
+enum ToolLatency {
+  LOCAL
+  FAST_REMOTE
+  SLOW_REMOTE
+}
+enum PromptFragmentInclusionMode {
+  ALWAYS
+  APPLICABLE
+  TASK_RELEVANT
+}
+enum DependencyResolutionStatus {
+  INCLUDED
+  UNAVAILABLE
+  OPTIONAL_OMITTED
+  BLOCKED_BY_DEPENDENCY
+}
+enum RelationDirection {
+  OUTGOING
+  INCOMING
+  BOTH
+}
+
+type Query {
+  runtimeInfo: RuntimeInfo!
+  retrieve(input: RetrievalInput!): RetrievalResult!
+  resolveConcepts(input: ConceptResolutionInput!): ConceptResolutionResult!
+  assembleAgent(input: AgentAssemblyInput!): AgentAssemblyResult!
+  namespace(key: String): Namespace
+  concepts(input: ConceptsInput): ConceptConnection!
+  concept(ref: EntityRefInput!): Concept
+  ontologyNeighborhood(input: OntologyNeighborhoodInput!): OntologyNeighborhood!
+  domains(input: DomainsInput): DomainConnection!
+  knowledgeItems(input: KnowledgeItemsInput): KnowledgeItemConnection!
+  knowledgeItem(ref: EntityRefInput!): KnowledgeItem
+  knowledgeChunk(ref: KnowledgeChunkRefInput!): KnowledgeChunk
+  dimensions: [DimensionDefinition!]!
+  dimension(ref: EntityRefInput!): DimensionDefinition
+  selectionGroups: [SelectionGroup!]!
+  retrievalProfiles: [RetrievalProfile!]!
+  agentTemplates: [AgentTemplate!]!
+  agentTemplate(ref: EntityRefInput!): AgentTemplate
+  skills(input: SkillsInput): SkillConnection!
+  skill(ref: EntityRefInput!): Skill
+  tools(input: ToolsInput): ToolConnection!
+  tool(ref: EntityRefInput!): Tool
+  promptFragments(input: PromptFragmentsInput): PromptFragmentConnection!
+  promptFragment(ref: EntityRefInput!): PromptFragment
+}
+
+input EntityRefInput {
+  id: ID
+  key: String
+}
+input KnowledgeChunkRefInput {
+  id: ID
+  knowledgeItem: String
+  key: String
+}
+input RetrievalInput {
+  namespace: String
+  query: String!
+  context: JSON
+  profile: String
+  filters: RetrievalFiltersInput
+  limits: RetrievalLimitsInput
+  diagnostics: Boolean = false
+}
+input RetrievalFiltersInput {
+  conceptIds: [ID!]
+  domainIds: [ID!]
+  knowledgeItemIds: [ID!]
+  includeDraft: Boolean = false
+  includeDeprecated: Boolean = false
+}
+input RetrievalLimitsInput {
+  maxChunks: Int
+  maxTokens: Int
+}
+input ConceptResolutionInput {
+  namespace: String
+  text: String!
+  limit: Int = 10
+}
+input AgentAssemblyInput {
+  namespace: String
+  template: String!
+  context: JSON
+  task: String
+  retrievalProfile: String
+  budgets: AgentAssemblyBudgetInput
+  runtime: AgentRuntimeInput
+  diagnostics: Boolean = false
+}
+input AgentAssemblyBudgetInput {
+  maxSkills: Int
+  maxTools: Int
+  promptTokens: Int
+  bootstrapKnowledgeTokens: Int
+}
+input AgentRuntimeInput {
+  availableBindings: [String!]
+}
+input ConceptsInput {
+  search: String
+  domain: String
+  type: String
+  status: LifecycleStatus
+  first: Int = 50
+  after: String
+}
+input KnowledgeItemsInput {
+  search: String
+  concept: String
+  domain: String
+  status: LifecycleStatus
+  first: Int = 50
+  after: String
+}
+input DomainsInput {
+  search: String
+  first: Int = 50
+  after: String
+}
+input SkillsInput {
+  search: String
+  status: LifecycleStatus
+  selectionGroup: String
+  first: Int = 50
+  after: String
+}
+input ToolsInput {
+  search: String
+  status: LifecycleStatus
+  selectionGroup: String
+  first: Int = 50
+  after: String
+}
+input PromptFragmentsInput {
+  search: String
+  status: LifecycleStatus
+  selectionGroup: String
+  first: Int = 50
+  after: String
+}
+input OntologyNeighborhoodInput {
+  concept: EntityRefInput!
+  direction: RelationDirection = BOTH
+  # V1 accepts only 1 or 2. Out-of-range values fail with INVALID_INPUT.
+  depth: Int = 1
+  relationTypes: [String!]
+  domain: String
+}
+
+type RuntimeInfo {
+  namespace: NamespaceRef!
+  environment: String!
+  runtimeRevision: Long!
+  gitCommit: String
+  sourceHash: String!
+  compilerVersion: String
+}
+type NamespaceRef {
+  id: ID!
+  key: String!
+}
+type Namespace {
+  id: ID!
+  key: String!
+  name: String!
+  description: String
+  defaultRetrievalProfile: RetrievalProfile
+  metadata: JSON!
+}
+type SourceLocation {
+  path: String!
+  line: Int
+  repositoryUrl: String
+  repositoryRef: String
+  viewUrl: String
+}
+type PageInfo {
+  hasNextPage: Boolean!
+  endCursor: String
+}
+
+type ConceptConnection {
+  nodes: [Concept!]!
+  pageInfo: PageInfo!
+  totalCount: Int
+}
+type DomainConnection {
+  nodes: [Domain!]!
+  pageInfo: PageInfo!
+  totalCount: Int
+}
+type KnowledgeItemConnection {
+  nodes: [KnowledgeItem!]!
+  pageInfo: PageInfo!
+  totalCount: Int
+}
+type SkillConnection {
+  nodes: [Skill!]!
+  pageInfo: PageInfo!
+  totalCount: Int
+}
+type ToolConnection {
+  nodes: [Tool!]!
+  pageInfo: PageInfo!
+  totalCount: Int
+}
+type PromptFragmentConnection {
+  nodes: [PromptFragment!]!
+  pageInfo: PageInfo!
+  totalCount: Int
+}
+type ConceptRelationConnection {
+  nodes: [ConceptRelation!]!
+  pageInfo: PageInfo!
+  totalCount: Int
+}
+type DimensionValueConnection {
+  nodes: [DimensionValue!]!
+  pageInfo: PageInfo!
+  totalCount: Int
+}
+
+type Concept {
+  id: ID!
+  key: String!
+  name: String!
+  type: String
+  description: String
+  status: LifecycleStatus!
+  aliases: [ConceptAlias!]!
+  domains: [Domain!]!
+  outgoingRelations(type: String, first: Int = 50, after: String): ConceptRelationConnection!
+  incomingRelations(type: String, first: Int = 50, after: String): ConceptRelationConnection!
+  source: SourceLocation!
+  metadata: JSON!
+}
+type ConceptAlias {
+  id: ID!
+  alias: String!
+}
+type Domain {
+  id: ID!
+  key: String!
+  name: String!
+  description: String
+  concepts(first: Int = 50, after: String): ConceptConnection!
+  source: SourceLocation!
+  metadata: JSON!
+}
+type RelationType {
+  id: ID!
+  key: String!
+  name: String!
+  description: String
+}
+type ConceptRelation {
+  id: ID!
+  type: RelationType!
+  sourceConcept: Concept!
+  targetConcept: Concept!
+  source: SourceLocation!
+}
+type OntologyNeighborhood {
+  center: Concept!
+  concepts: [Concept!]!
+  relations: [ConceptRelation!]!
+}
+
+type KnowledgeSource {
+  id: ID!
+  key: String
+  title: String!
+  uri: String
+  type: String
+  checksum: String
+  metadata: JSON!
+}
+type KnowledgeItem {
+  id: ID!
+  key: String!
+  title: String!
+  summary: String
+  status: LifecycleStatus!
+  authorityScore: Float
+  effectiveFrom: DateTime
+  effectiveTo: DateTime
+  sourceReference: KnowledgeSource
+  chunks(first: Int = 100, after: String): KnowledgeChunkConnection!
+  source: SourceLocation!
+  metadata: JSON!
+}
+type KnowledgeChunkConnection {
+  nodes: [KnowledgeChunk!]!
+  pageInfo: PageInfo!
+  totalCount: Int
+}
+type KnowledgeChunk {
+  id: ID!
+  key: String!
+  ordinal: Int!
+  heading: String
+  content: String!
+  status: LifecycleStatus!
+  priority: Int!
+  authorityScore: Float
+  effectiveFrom: DateTime
+  effectiveTo: DateTime
+  tokenCount: Int
+  concepts: [Concept!]!
+  knowledgeItem: KnowledgeItem!
+  selectionGroup: SelectionGroup
+  source: SourceLocation!
+  metadata: JSON!
+}
+
+type DimensionDefinition {
+  id: ID!
+  key: String!
+  name: String!
+  description: String
+  valueType: String!
+  cardinality: String!
+  category: String!
+  allowedOperators: [String!]!
+  hierarchical: Boolean!
+  required: Boolean!
+  missingValueBehavior: String!
+  trust: String!
+  values(first: Int = 100, after: String): DimensionValueConnection!
+  source: SourceLocation!
+}
+type DimensionValue {
+  id: ID!
+  key: String!
+  name: String
+  parent: DimensionValue
+  children: [DimensionValue!]!
+  metadata: JSON!
+}
+union SelectionGroupMember = KnowledgeChunk | Skill | Tool | PromptFragment
+type SelectionGroup {
+  id: ID!
+  key: String!
+  name: String
+  entityType: String!
+  mode: SelectionGroupMode!
+  members: [SelectionGroupMember!]!
+  source: SourceLocation!
+}
+type RetrievalProfile {
+  id: ID!
+  key: String!
+  name: String
+  config: JSON!
+  source: SourceLocation!
+}
+
+type RetrievalResult {
+  namespace: NamespaceRef!
+  runtimeRevision: Long!
+  query: String!
+  resolvedConcepts: [ResolvedConcept!]!
+  results: [RetrievalResultItem!]!
+  packedContext: PackedContext
+  diagnostics: RetrievalDiagnostics
+}
+type ResolvedConcept {
+  concept: Concept!
+  matchType: ConceptMatchType!
+  matchedText: String
+  score: Float
+  rank: Int!
+}
+type ConceptResolutionResult {
+  matches: [ResolvedConcept!]!
+  warnings: [DiagnosticWarning!]!
+}
+type RetrievalResultItem {
+  chunk: KnowledgeChunk!
+  score: Float!
+  rank: Int!
+  reasons: [RetrievalReason!]
+}
+# `code` MUST use the retrieval inclusion-reason registry in spec/14.
+type RetrievalReason {
+  code: String!
+  message: String!
+  details: JSON
+}
+type PackedContext {
+  chunks: [KnowledgeChunk!]!
+  estimatedTokens: Int!
+  maxTokens: Int
+  maxChunks: Int
+}
+type RetrievalDiagnostics {
+  timings: [StageTiming!]!
+  candidateCounts: RetrievalCandidateCounts!
+  exclusions: [RetrievalExclusion!]!
+  rankings: [RetrievalRankingDiagnostic!]!
+  graphPaths: [OntologyPath!]!
+  packing: PackingDiagnostics!
+  warnings: [DiagnosticWarning!]!
+}
+# `stage` MUST use the v1 stage-name registry in spec/14.
+type StageTiming {
+  stage: String!
+  milliseconds: Float!
+}
+type RetrievalCandidateCounts {
+  vector: Int!
+  fullText: Int!
+  trigram: Int!
+  conceptLinked: Int!
+  graphLinked: Int!
+  unique: Int!
+  afterLifecycle: Int!
+  afterAuthorization: Int!
+  afterApplicability: Int!
+  afterSelectionGroups: Int!
+  packed: Int!
+}
+type RetrievalExclusion {
+  chunk: EntityRef
+  redacted: Boolean!
+  stage: String!
+  code: String!
+  message: String!
+  details: JSON
+}
+type RetrievalRankingDiagnostic {
+  chunkId: ID!
+  finalRank: Int!
+  vectorRank: Int
+  vectorScore: Float
+  fullTextRank: Int
+  fullTextScore: Float
+  trigramRank: Int
+  trigramScore: Float
+  conceptRank: Int
+  graphRank: Int
+  rrfScore: Float!
+  authorityScore: Float!
+  priority: Int!
+}
+type OntologyPath {
+  seedConcept: Concept!
+  targetConcept: Concept!
+  depth: Int!
+  steps: [OntologyPathStep!]!
+}
+type OntologyPathStep {
+  relation: RelationType!
+  direction: RelationDirection!
+  from: Concept!
+  to: Concept!
+}
+type PackingDiagnostics {
+  considered: Int!
+  packed: Int!
+  skippedForBudget: Int!
+  skippedForItemCap: Int!
+}
+type DiagnosticWarning {
+  code: String!
+  message: String!
+  details: JSON
+}
+
+type AgentTemplate {
+  id: ID!
+  key: String!
+  name: String!
+  description: String
+  status: LifecycleStatus!
+  retrievalProfile: RetrievalProfile
+  budgets: AgentTemplateBudgets!
+  promptFragments: [PromptFragment!]!
+  source: SourceLocation!
+  metadata: JSON!
+}
+type AgentTemplateBudgets {
+  maxSkills: Int
+  maxTools: Int
+  promptTokens: Int
+  bootstrapKnowledgeTokens: Int
+}
+type Skill {
+  id: ID!
+  key: String!
+  name: String!
+  description: String
+  status: LifecycleStatus!
+  priority: Int!
+  selectionGroup: SelectionGroup
+  concepts: [Concept!]!
+  promptFragments: [PromptFragment!]!
+  tools: [Tool!]!
+  source: SourceLocation!
+  metadata: JSON!
+}
+type Tool {
+  id: ID!
+  key: String!
+  name: String!
+  description: String!
+  status: LifecycleStatus!
+  priority: Int!
+  selectionGroup: SelectionGroup
+  runtimeBinding: String!
+  risk: ToolRisk
+  latency: ToolLatency
+  concepts: [Concept!]!
+  dependencies: [ToolDependency!]!
+  dependents: [ToolDependency!]!
+  inputSchema: JSON
+  outputSchema: JSON
+  source: SourceLocation!
+  metadata: JSON!
+}
+type ToolDependency {
+  requirement: ToolDependencyRequirement!
+  sourceTool: Tool!
+  targetTool: Tool!
+}
+type PromptFragment {
+  id: ID!
+  key: String!
+  name: String!
+  status: LifecycleStatus!
+  inclusionMode: PromptFragmentInclusionMode!
+  section: String!
+  order: Int!
+  content: String!
+  priority: Int!
+  concepts: [Concept!]!
+  selectionGroup: SelectionGroup
+  source: SourceLocation!
+  metadata: JSON!
+}
+
+type AgentAssemblyResult {
+  namespace: NamespaceRef!
+  runtimeRevision: Long!
+  template: AgentTemplate!
+  contextHash: String!
+  task: AssembledTask
+  promptFragments: [AssembledPromptFragment!]!
+  skills: [AssembledSkill!]!
+  tools: [AssembledTool!]!
+  bootstrapKnowledge: [RetrievalResultItem!]!
+  renderedPrompt: String
+  budgetUsage: AgentAssemblyBudgetUsage!
+  diagnostics: AgentAssemblyDiagnostics
+}
+type AssembledTask {
+  text: String!
+  hash: String!
+  resolvedConcepts: [ResolvedConcept!]!
+}
+type AssembledSkill {
+  skill: Skill!
+  rank: Int
+  score: Float
+  inclusionReasons: [AssemblyReason!]!
+}
+type AssembledTool {
+  tool: Tool!
+  sources: [String!]!
+  requiredBy: [EntityRef!]!
+  inclusionReasons: [AssemblyReason!]!
+}
+type AssembledPromptFragment {
+  fragment: PromptFragment!
+  sources: [String!]!
+  renderedOrder: Int!
+  estimatedTokens: Int!
+  inclusionReasons: [AssemblyReason!]!
+}
+type EntityRef {
+  id: ID!
+  key: String!
+  type: String!
+}
+# `code` MUST use the Agent Assembly inclusion-reason registry in spec/14.
+type AssemblyReason {
+  code: String!
+  message: String!
+  details: JSON
+}
+type AgentAssemblyBudgetUsage {
+  skills: Int!
+  maxSkills: Int
+  tools: Int!
+  maxTools: Int
+  promptTokens: Int!
+  maxPromptTokens: Int
+  bootstrapKnowledgeTokens: Int!
+  maxBootstrapKnowledgeTokens: Int
+}
+type AgentAssemblyDiagnostics {
+  skillCandidates: [AssemblyCandidateDiagnostic!]!
+  toolCandidates: [AssemblyCandidateDiagnostic!]!
+  fragmentCandidates: [AssemblyCandidateDiagnostic!]!
+  dependencyResolutions: [ToolDependencyResolution!]!
+  bootstrapRetrieval: RetrievalDiagnostics
+  timings: [StageTiming!]!
+  warnings: [DiagnosticWarning!]!
+}
+type AssemblyCandidateDiagnostic {
+  entity: EntityRef!
+  selected: Boolean!
+  rank: Int
+  score: Float
+  code: String
+  message: String
+  causes: [DiagnosticCause!]!
+}
+type DiagnosticCause {
+  entityType: String!
+  entityId: ID
+  code: String!
+  message: String!
+}
+type ToolDependencyResolution {
+  sourceTool: Tool!
+  targetTool: Tool!
+  requirement: ToolDependencyRequirement!
+  status: DependencyResolutionStatus!
+  reason: String
+}

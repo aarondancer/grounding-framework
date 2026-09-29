@@ -6,3 +6,26 @@ thumbs.db
 desktop.ini
 Desktop.ini
 .directory
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.output/
+.turbo/
+
+# TanStack generated
+.tanstack/
+apps/web/src/routeTree.gen.ts
+
+# Compiler state
+.grounding/
+
+# Env/secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log

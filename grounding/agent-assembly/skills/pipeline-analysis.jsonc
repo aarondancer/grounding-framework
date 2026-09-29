@@ -1,0 +1,12 @@
+{
+  "id": "019d0000-0000-7000-8000-000000000110",
+  "key": "pipeline-analysis",
+  "name": "Pipeline Analysis",
+  "status": "published",
+  "description": "Analyze sales pipeline movement, conversion, and team performance.",
+  "concepts": ["sales-pipeline", "conversion-rate"],
+  "promptFragments": ["analytics/pipeline-analysis"],
+  "tools": ["analytics.queryTeamMetrics"],
+  "priority": 10,
+  "semanticText": "Analyze sales pipeline, lead stages, conversion, velocity, and team performance."
+}

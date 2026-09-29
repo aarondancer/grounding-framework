@@ -1,0 +1,10 @@
+{
+  "relations": [
+    {
+      "id": "019d0000-0000-7000-8000-000000000040",
+      "source": "conversion-rate",
+      "type": "measures",
+      "target": "sales-pipeline"
+    }
+  ]
+}

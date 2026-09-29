@@ -1,0 +1,3475 @@
+{
+  "id": "58887c62-d59e-4b7e-904a-d43a64afe925",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.agent_templates": {
+      "name": "agent_templates",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "retrieval_profile_id": {
+          "name": "retrieval_profile_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_skills": {
+          "name": "max_skills",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_tools": {
+          "name": "max_tools",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "prompt_token_budget": {
+          "name": "prompt_token_budget",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bootstrap_knowledge_token_budget": {
+          "name": "bootstrap_knowledge_token_budget",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_path": {
+          "name": "source_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "compiled_hash": {
+          "name": "compiled_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "agent_templates_namespace_id_namespaces_id_fk": {
+          "name": "agent_templates_namespace_id_namespaces_id_fk",
+          "tableFrom": "agent_templates",
+          "tableTo": "namespaces",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "agent_templates_namespace_id_retrieval_profile_id_retrieval_profiles_namespace_id_id_fk": {
+          "name": "agent_templates_namespace_id_retrieval_profile_id_retrieval_profiles_namespace_id_id_fk",
+          "tableFrom": "agent_templates",
+          "tableTo": "retrieval_profiles",
+          "columnsFrom": ["namespace_id", "retrieval_profile_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "agent_templates_namespace_id_key_unique": {
+          "name": "agent_templates_namespace_id_key_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "key"]
+        },
+        "agent_templates_namespace_id_id_unique": {
+          "name": "agent_templates_namespace_id_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "agent_templates_status_check": {
+          "name": "agent_templates_status_check",
+          "value": "\"agent_templates\".\"status\" in ('draft', 'published', 'deprecated')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.chunk_concepts": {
+      "name": "chunk_concepts",
+      "schema": "",
+      "columns": {
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "chunk_id": {
+          "name": "chunk_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "concept_id": {
+          "name": "concept_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "chunk_concepts_concept_idx": {
+          "name": "chunk_concepts_concept_idx",
+          "columns": [
+            {
+              "expression": "namespace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "concept_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "chunk_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "chunk_concepts_namespace_id_namespaces_id_fk": {
+          "name": "chunk_concepts_namespace_id_namespaces_id_fk",
+          "tableFrom": "chunk_concepts",
+          "tableTo": "namespaces",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "chunk_concepts_namespace_id_chunk_id_knowledge_chunks_namespace_id_id_fk": {
+          "name": "chunk_concepts_namespace_id_chunk_id_knowledge_chunks_namespace_id_id_fk",
+          "tableFrom": "chunk_concepts",
+          "tableTo": "knowledge_chunks",
+          "columnsFrom": ["namespace_id", "chunk_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "chunk_concepts_namespace_id_concept_id_concepts_namespace_id_id_fk": {
+          "name": "chunk_concepts_namespace_id_concept_id_concepts_namespace_id_id_fk",
+          "tableFrom": "chunk_concepts",
+          "tableTo": "concepts",
+          "columnsFrom": ["namespace_id", "concept_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "chunk_concepts_chunk_id_concept_id_pk": {
+          "name": "chunk_concepts_chunk_id_concept_id_pk",
+          "columns": ["chunk_id", "concept_id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.concept_aliases": {
+      "name": "concept_aliases",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "concept_id": {
+          "name": "concept_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "alias": {
+          "name": "alias",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "normalized_alias": {
+          "name": "normalized_alias",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_path": {
+          "name": "source_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "concept_aliases_normalized_idx": {
+          "name": "concept_aliases_normalized_idx",
+          "columns": [
+            {
+              "expression": "namespace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "normalized_alias",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "concept_aliases_trgm_idx": {
+          "name": "concept_aliases_trgm_idx",
+          "columns": [
+            {
+              "expression": "\"normalized_alias\" gin_trgm_ops",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "concept_aliases_namespace_id_namespaces_id_fk": {
+          "name": "concept_aliases_namespace_id_namespaces_id_fk",
+          "tableFrom": "concept_aliases",
+          "tableTo": "namespaces",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "concept_aliases_namespace_id_concept_id_concepts_namespace_id_id_fk": {
+          "name": "concept_aliases_namespace_id_concept_id_concepts_namespace_id_id_fk",
+          "tableFrom": "concept_aliases",
+          "tableTo": "concepts",
+          "columnsFrom": ["namespace_id", "concept_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "concept_aliases_namespace_id_concept_id_normalized_alias_unique": {
+          "name": "concept_aliases_namespace_id_concept_id_normalized_alias_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "concept_id", "normalized_alias"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.concept_domains": {
+      "name": "concept_domains",
+      "schema": "",
+      "columns": {
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "concept_id": {
+          "name": "concept_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "domain_id": {
+          "name": "domain_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "concept_domains_namespace_domain_idx": {
+          "name": "concept_domains_namespace_domain_idx",
+          "columns": [
+            {
+              "expression": "namespace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "domain_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "concept_domains_namespace_id_namespaces_id_fk": {
+          "name": "concept_domains_namespace_id_namespaces_id_fk",
+          "tableFrom": "concept_domains",
+          "tableTo": "namespaces",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "concept_domains_namespace_id_concept_id_concepts_namespace_id_id_fk": {
+          "name": "concept_domains_namespace_id_concept_id_concepts_namespace_id_id_fk",
+          "tableFrom": "concept_domains",
+          "tableTo": "concepts",
+          "columnsFrom": ["namespace_id", "concept_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "concept_domains_namespace_id_domain_id_domains_namespace_id_id_fk": {
+          "name": "concept_domains_namespace_id_domain_id_domains_namespace_id_id_fk",
+          "tableFrom": "concept_domains",
+          "tableTo": "domains",
+          "columnsFrom": ["namespace_id", "domain_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "concept_domains_concept_id_domain_id_pk": {
+          "name": "concept_domains_concept_id_domain_id_pk",
+          "columns": ["concept_id", "domain_id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.concept_relations": {
+      "name": "concept_relations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_concept_id": {
+          "name": "source_concept_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "relation_type_id": {
+          "name": "relation_type_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_concept_id": {
+          "name": "target_concept_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_path": {
+          "name": "source_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "compiled_hash": {
+          "name": "compiled_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        }
+      },
+      "indexes": {
+        "concept_relations_outgoing_idx": {
+          "name": "concept_relations_outgoing_idx",
+          "columns": [
+            {
+              "expression": "namespace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "source_concept_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "relation_type_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "concept_relations_incoming_idx": {
+          "name": "concept_relations_incoming_idx",
+          "columns": [
+            {
+              "expression": "namespace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "target_concept_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "relation_type_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "concept_relations_namespace_id_namespaces_id_fk": {
+          "name": "concept_relations_namespace_id_namespaces_id_fk",
+          "tableFrom": "concept_relations",
+          "tableTo": "namespaces",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "concept_relations_namespace_id_source_concept_id_concepts_namespace_id_id_fk": {
+          "name": "concept_relations_namespace_id_source_concept_id_concepts_namespace_id_id_fk",
+          "tableFrom": "concept_relations",
+          "tableTo": "concepts",
+          "columnsFrom": ["namespace_id", "source_concept_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "concept_relations_namespace_id_target_concept_id_concepts_namespace_id_id_fk": {
+          "name": "concept_relations_namespace_id_target_concept_id_concepts_namespace_id_id_fk",
+          "tableFrom": "concept_relations",
+          "tableTo": "concepts",
+          "columnsFrom": ["namespace_id", "target_concept_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "concept_relations_namespace_id_relation_type_id_relation_types_namespace_id_id_fk": {
+          "name": "concept_relations_namespace_id_relation_type_id_relation_types_namespace_id_id_fk",
+          "tableFrom": "concept_relations",
+          "tableTo": "relation_types",
+          "columnsFrom": ["namespace_id", "relation_type_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "concept_relations_no_self": {
+          "name": "concept_relations_no_self",
+          "value": "\"concept_relations\".\"source_concept_id\" <> \"concept_relations\".\"target_concept_id\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.concepts": {
+      "name": "concepts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "normalized_key": {
+          "name": "normalized_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "normalized_name": {
+          "name": "normalized_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "concept_type": {
+          "name": "concept_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'published'"
+        },
+        "source_path": {
+          "name": "source_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "compiled_hash": {
+          "name": "compiled_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "semantic_hash": {
+          "name": "semantic_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        }
+      },
+      "indexes": {
+        "concepts_namespace_status_idx": {
+          "name": "concepts_namespace_status_idx",
+          "columns": [
+            {
+              "expression": "namespace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "concepts_name_trgm_idx": {
+          "name": "concepts_name_trgm_idx",
+          "columns": [
+            {
+              "expression": "\"normalized_name\" gin_trgm_ops",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        },
+        "concepts_key_trgm_idx": {
+          "name": "concepts_key_trgm_idx",
+          "columns": [
+            {
+              "expression": "\"normalized_key\" gin_trgm_ops",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "concepts_namespace_id_namespaces_id_fk": {
+          "name": "concepts_namespace_id_namespaces_id_fk",
+          "tableFrom": "concepts",
+          "tableTo": "namespaces",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "concepts_namespace_id_key_unique": {
+          "name": "concepts_namespace_id_key_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "key"]
+        },
+        "concepts_namespace_id_id_unique": {
+          "name": "concepts_namespace_id_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "concepts_status_check": {
+          "name": "concepts_status_check",
+          "value": "\"concepts\".\"status\" in ('draft', 'published', 'deprecated')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.deployments": {
+      "name": "deployments",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "environment": {
+          "name": "environment",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "git_commit": {
+          "name": "git_commit",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_hash": {
+          "name": "source_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "compiler_version": {
+          "name": "compiler_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "schema_version": {
+          "name": "schema_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "initiated_by": {
+          "name": "initiated_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "error_message": {
+          "name": "error_message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        }
+      },
+      "indexes": {
+        "deployments_namespace_environment_idx": {
+          "name": "deployments_namespace_environment_idx",
+          "columns": [
+            {
+              "expression": "namespace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "environment",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "\"started_at\" desc",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "deployments_namespace_id_namespaces_id_fk": {
+          "name": "deployments_namespace_id_namespaces_id_fk",
+          "tableFrom": "deployments",
+          "tableTo": "namespaces",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "deployments_namespace_id_id_unique": {
+          "name": "deployments_namespace_id_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "deployments_status_check": {
+          "name": "deployments_status_check",
+          "value": "\"deployments\".\"status\" in ('pending','deploying','active','failed','superseded')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.dimension_definitions": {
+      "name": "dimension_definitions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "value_type": {
+          "name": "value_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cardinality": {
+          "name": "cardinality",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "allowed_operators": {
+          "name": "allowed_operators",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "hierarchical": {
+          "name": "hierarchical",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "required": {
+          "name": "required",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "missing_value_behavior": {
+          "name": "missing_value_behavior",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'no_match'"
+        },
+        "trust": {
+          "name": "trust",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'request'"
+        },
+        "source_path": {
+          "name": "source_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "compiled_hash": {
+          "name": "compiled_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "dimension_definitions_namespace_id_namespaces_id_fk": {
+          "name": "dimension_definitions_namespace_id_namespaces_id_fk",
+          "tableFrom": "dimension_definitions",
+          "tableTo": "namespaces",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "dimension_definitions_namespace_id_key_unique": {
+          "name": "dimension_definitions_namespace_id_key_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "key"]
+        },
+        "dimension_definitions_namespace_id_id_unique": {
+          "name": "dimension_definitions_namespace_id_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "dimension_definitions_value_type_check": {
+          "name": "dimension_definitions_value_type_check",
+          "value": "\"dimension_definitions\".\"value_type\" in ('string','number','boolean','date','enum')"
+        },
+        "dimension_definitions_cardinality_check": {
+          "name": "dimension_definitions_cardinality_check",
+          "value": "\"dimension_definitions\".\"cardinality\" in ('single','multi')"
+        },
+        "dimension_definitions_category_check": {
+          "name": "dimension_definitions_category_check",
+          "value": "\"dimension_definitions\".\"category\" in ('authorization','eligibility','applicability','ranking','descriptive')"
+        },
+        "dimension_definitions_mvb_check": {
+          "name": "dimension_definitions_mvb_check",
+          "value": "\"dimension_definitions\".\"missing_value_behavior\" in ('no_match','unknown','ignore')"
+        },
+        "dimension_definitions_trust_check": {
+          "name": "dimension_definitions_trust_check",
+          "value": "\"dimension_definitions\".\"trust\" in ('server','request')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.dimension_value_closure": {
+      "name": "dimension_value_closure",
+      "schema": "",
+      "columns": {
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dimension_id": {
+          "name": "dimension_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ancestor_value_id": {
+          "name": "ancestor_value_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "descendant_value_id": {
+          "name": "descendant_value_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "depth": {
+          "name": "depth",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "dimension_value_closure_descendant_idx": {
+          "name": "dimension_value_closure_descendant_idx",
+          "columns": [
+            {
+              "expression": "namespace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "dimension_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "descendant_value_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "dimension_value_closure_namespace_id_namespaces_id_fk": {
+          "name": "dimension_value_closure_namespace_id_namespaces_id_fk",
+          "tableFrom": "dimension_value_closure",
+          "tableTo": "namespaces",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "dimension_value_closure_namespace_id_dimension_id_dimension_definitions_namespace_id_id_fk": {
+          "name": "dimension_value_closure_namespace_id_dimension_id_dimension_definitions_namespace_id_id_fk",
+          "tableFrom": "dimension_value_closure",
+          "tableTo": "dimension_definitions",
+          "columnsFrom": ["namespace_id", "dimension_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "dimension_value_closure_namespace_id_ancestor_value_id_dimension_values_namespace_id_id_fk": {
+          "name": "dimension_value_closure_namespace_id_ancestor_value_id_dimension_values_namespace_id_id_fk",
+          "tableFrom": "dimension_value_closure",
+          "tableTo": "dimension_values",
+          "columnsFrom": ["namespace_id", "ancestor_value_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "dimension_value_closure_namespace_id_descendant_value_id_dimension_values_namespace_id_id_fk": {
+          "name": "dimension_value_closure_namespace_id_descendant_value_id_dimension_values_namespace_id_id_fk",
+          "tableFrom": "dimension_value_closure",
+          "tableTo": "dimension_values",
+          "columnsFrom": ["namespace_id", "descendant_value_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "dimension_value_closure_dimension_id_ancestor_value_id_descendant_value_id_pk": {
+          "name": "dimension_value_closure_dimension_id_ancestor_value_id_descendant_value_id_pk",
+          "columns": ["dimension_id", "ancestor_value_id", "descendant_value_id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "dimension_value_closure_depth_check": {
+          "name": "dimension_value_closure_depth_check",
+          "value": "\"dimension_value_closure\".\"depth\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.dimension_values": {
+      "name": "dimension_values",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dimension_id": {
+          "name": "dimension_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "parent_value_id": {
+          "name": "parent_value_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_path": {
+          "name": "source_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "compiled_hash": {
+          "name": "compiled_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "dimension_values_namespace_id_namespaces_id_fk": {
+          "name": "dimension_values_namespace_id_namespaces_id_fk",
+          "tableFrom": "dimension_values",
+          "tableTo": "namespaces",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "dimension_values_namespace_id_dimension_id_dimension_definitions_namespace_id_id_fk": {
+          "name": "dimension_values_namespace_id_dimension_id_dimension_definitions_namespace_id_id_fk",
+          "tableFrom": "dimension_values",
+          "tableTo": "dimension_definitions",
+          "columnsFrom": ["namespace_id", "dimension_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "dimension_values_namespace_id_parent_value_id_dimension_values_namespace_id_id_fk": {
+          "name": "dimension_values_namespace_id_parent_value_id_dimension_values_namespace_id_id_fk",
+          "tableFrom": "dimension_values",
+          "tableTo": "dimension_values",
+          "columnsFrom": ["namespace_id", "parent_value_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "dimension_values_namespace_id_dimension_id_key_unique": {
+          "name": "dimension_values_namespace_id_dimension_id_key_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "dimension_id", "key"]
+        },
+        "dimension_values_namespace_id_id_unique": {
+          "name": "dimension_values_namespace_id_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.domains": {
+      "name": "domains",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_path": {
+          "name": "source_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "compiled_hash": {
+          "name": "compiled_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "domains_namespace_id_namespaces_id_fk": {
+          "name": "domains_namespace_id_namespaces_id_fk",
+          "tableFrom": "domains",
+          "tableTo": "namespaces",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "domains_namespace_id_key_unique": {
+          "name": "domains_namespace_id_key_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "key"]
+        },
+        "domains_namespace_id_id_unique": {
+          "name": "domains_namespace_id_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.knowledge_chunks": {
+      "name": "knowledge_chunks",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "knowledge_item_id": {
+          "name": "knowledge_item_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "chunk_key": {
+          "name": "chunk_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ordinal": {
+          "name": "ordinal",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "heading": {
+          "name": "heading",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "normalized_heading": {
+          "name": "normalized_heading",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "priority": {
+          "name": "priority",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "authority_score": {
+          "name": "authority_score",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "effective_from": {
+          "name": "effective_from",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "effective_to": {
+          "name": "effective_to",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "selection_group_id": {
+          "name": "selection_group_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "authorization_expression": {
+          "name": "authorization_expression",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "applicability_expression": {
+          "name": "applicability_expression",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "token_count": {
+          "name": "token_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "search_text": {
+          "name": "search_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "search_vector": {
+          "name": "search_vector",
+          "type": "tsvector",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "compiled_hash": {
+          "name": "compiled_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "semantic_hash": {
+          "name": "semantic_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "lexical_hash": {
+          "name": "lexical_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_path": {
+          "name": "source_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        }
+      },
+      "indexes": {
+        "knowledge_chunks_item_idx": {
+          "name": "knowledge_chunks_item_idx",
+          "columns": [
+            {
+              "expression": "namespace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "knowledge_item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ordinal",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "knowledge_chunks_status_idx": {
+          "name": "knowledge_chunks_status_idx",
+          "columns": [
+            {
+              "expression": "namespace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "knowledge_chunks_selection_group_idx": {
+          "name": "knowledge_chunks_selection_group_idx",
+          "columns": [
+            {
+              "expression": "namespace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "selection_group_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "knowledge_chunks_search_vector_idx": {
+          "name": "knowledge_chunks_search_vector_idx",
+          "columns": [
+            {
+              "expression": "search_vector",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        },
+        "knowledge_chunks_heading_trgm_idx": {
+          "name": "knowledge_chunks_heading_trgm_idx",
+          "columns": [
+            {
+              "expression": "\"normalized_heading\" gin_trgm_ops",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"knowledge_chunks\".\"normalized_heading\" is not null",
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        },
+        "knowledge_chunks_published_idx": {
+          "name": "knowledge_chunks_published_idx",
+          "columns": [
+            {
+              "expression": "namespace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"knowledge_chunks\".\"status\" = 'published'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "knowledge_chunks_namespace_id_namespaces_id_fk": {
+          "name": "knowledge_chunks_namespace_id_namespaces_id_fk",
+          "tableFrom": "knowledge_chunks",
+          "tableTo": "namespaces",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "knowledge_chunks_namespace_id_knowledge_item_id_knowledge_items_namespace_id_id_fk": {
+          "name": "knowledge_chunks_namespace_id_knowledge_item_id_knowledge_items_namespace_id_id_fk",
+          "tableFrom": "knowledge_chunks",
+          "tableTo": "knowledge_items",
+          "columnsFrom": ["namespace_id", "knowledge_item_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "knowledge_chunks_namespace_id_selection_group_id_selection_groups_namespace_id_id_fk": {
+          "name": "knowledge_chunks_namespace_id_selection_group_id_selection_groups_namespace_id_id_fk",
+          "tableFrom": "knowledge_chunks",
+          "tableTo": "selection_groups",
+          "columnsFrom": ["namespace_id", "selection_group_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "knowledge_chunks_namespace_id_knowledge_item_id_chunk_key_unique": {
+          "name": "knowledge_chunks_namespace_id_knowledge_item_id_chunk_key_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "knowledge_item_id", "chunk_key"]
+        },
+        "knowledge_chunks_namespace_id_id_unique": {
+          "name": "knowledge_chunks_namespace_id_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "knowledge_chunks_ordinal_check": {
+          "name": "knowledge_chunks_ordinal_check",
+          "value": "\"knowledge_chunks\".\"ordinal\" >= 0"
+        },
+        "knowledge_chunks_status_check": {
+          "name": "knowledge_chunks_status_check",
+          "value": "\"knowledge_chunks\".\"status\" in ('draft', 'published', 'deprecated')"
+        },
+        "knowledge_chunks_window_check": {
+          "name": "knowledge_chunks_window_check",
+          "value": "\"knowledge_chunks\".\"effective_from\" is null or \"knowledge_chunks\".\"effective_to\" is null or \"knowledge_chunks\".\"effective_from\" < \"knowledge_chunks\".\"effective_to\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.knowledge_items": {
+      "name": "knowledge_items",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "normalized_title": {
+          "name": "normalized_title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "summary": {
+          "name": "summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "authority_score": {
+          "name": "authority_score",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "effective_from": {
+          "name": "effective_from",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "effective_to": {
+          "name": "effective_to",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_id": {
+          "name": "source_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_path": {
+          "name": "source_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "compiled_hash": {
+          "name": "compiled_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        }
+      },
+      "indexes": {
+        "knowledge_items_title_trgm_idx": {
+          "name": "knowledge_items_title_trgm_idx",
+          "columns": [
+            {
+              "expression": "\"normalized_title\" gin_trgm_ops",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "knowledge_items_namespace_id_namespaces_id_fk": {
+          "name": "knowledge_items_namespace_id_namespaces_id_fk",
+          "tableFrom": "knowledge_items",
+          "tableTo": "namespaces",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "knowledge_items_namespace_id_source_id_knowledge_sources_namespace_id_id_fk": {
+          "name": "knowledge_items_namespace_id_source_id_knowledge_sources_namespace_id_id_fk",
+          "tableFrom": "knowledge_items",
+          "tableTo": "knowledge_sources",
+          "columnsFrom": ["namespace_id", "source_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "knowledge_items_namespace_id_key_unique": {
+          "name": "knowledge_items_namespace_id_key_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "key"]
+        },
+        "knowledge_items_namespace_id_id_unique": {
+          "name": "knowledge_items_namespace_id_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "knowledge_items_status_check": {
+          "name": "knowledge_items_status_check",
+          "value": "\"knowledge_items\".\"status\" in ('draft', 'published', 'deprecated')"
+        },
+        "knowledge_items_window_check": {
+          "name": "knowledge_items_window_check",
+          "value": "\"knowledge_items\".\"effective_from\" is null or \"knowledge_items\".\"effective_to\" is null or \"knowledge_items\".\"effective_from\" < \"knowledge_items\".\"effective_to\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.knowledge_sources": {
+      "name": "knowledge_sources",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "uri": {
+          "name": "uri",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_type": {
+          "name": "source_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "checksum": {
+          "name": "checksum",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "knowledge_sources_namespace_id_namespaces_id_fk": {
+          "name": "knowledge_sources_namespace_id_namespaces_id_fk",
+          "tableFrom": "knowledge_sources",
+          "tableTo": "namespaces",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "knowledge_sources_namespace_id_key_unique": {
+          "name": "knowledge_sources_namespace_id_key_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "key"]
+        },
+        "knowledge_sources_namespace_id_id_unique": {
+          "name": "knowledge_sources_namespace_id_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.namespace_runtime_state": {
+      "name": "namespace_runtime_state",
+      "schema": "",
+      "columns": {
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "environment": {
+          "name": "environment",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "runtime_revision": {
+          "name": "runtime_revision",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "git_commit": {
+          "name": "git_commit",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_hash": {
+          "name": "source_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "embedding_config_hash": {
+          "name": "embedding_config_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "active_deployment_id": {
+          "name": "active_deployment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "namespace_runtime_state_namespace_id_namespaces_id_fk": {
+          "name": "namespace_runtime_state_namespace_id_namespaces_id_fk",
+          "tableFrom": "namespace_runtime_state",
+          "tableTo": "namespaces",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "namespace_runtime_state_active_deployment_id_deployments_id_fk": {
+          "name": "namespace_runtime_state_active_deployment_id_deployments_id_fk",
+          "tableFrom": "namespace_runtime_state",
+          "tableTo": "deployments",
+          "columnsFrom": ["active_deployment_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "namespace_runtime_state_namespace_id_environment_pk": {
+          "name": "namespace_runtime_state_namespace_id_environment_pk",
+          "columns": ["namespace_id", "environment"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.namespaces": {
+      "name": "namespaces",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "default_retrieval_profile_id": {
+          "name": "default_retrieval_profile_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "namespaces_key_unique": {
+          "name": "namespaces_key_unique",
+          "nullsNotDistinct": false,
+          "columns": ["key"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.prompt_fragment_concepts": {
+      "name": "prompt_fragment_concepts",
+      "schema": "",
+      "columns": {
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "prompt_fragment_id": {
+          "name": "prompt_fragment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "concept_id": {
+          "name": "concept_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "prompt_fragment_concepts_namespace_id_namespaces_id_fk": {
+          "name": "prompt_fragment_concepts_namespace_id_namespaces_id_fk",
+          "tableFrom": "prompt_fragment_concepts",
+          "tableTo": "namespaces",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "prompt_fragment_concepts_namespace_id_prompt_fragment_id_prompt_fragments_namespace_id_id_fk": {
+          "name": "prompt_fragment_concepts_namespace_id_prompt_fragment_id_prompt_fragments_namespace_id_id_fk",
+          "tableFrom": "prompt_fragment_concepts",
+          "tableTo": "prompt_fragments",
+          "columnsFrom": ["namespace_id", "prompt_fragment_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "prompt_fragment_concepts_namespace_id_concept_id_concepts_namespace_id_id_fk": {
+          "name": "prompt_fragment_concepts_namespace_id_concept_id_concepts_namespace_id_id_fk",
+          "tableFrom": "prompt_fragment_concepts",
+          "tableTo": "concepts",
+          "columnsFrom": ["namespace_id", "concept_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "prompt_fragment_concepts_prompt_fragment_id_concept_id_pk": {
+          "name": "prompt_fragment_concepts_prompt_fragment_id_concept_id_pk",
+          "columns": ["prompt_fragment_id", "concept_id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.prompt_fragments": {
+      "name": "prompt_fragments",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "inclusion_mode": {
+          "name": "inclusion_mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "section": {
+          "name": "section",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "order_hint": {
+          "name": "order_hint",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "selection_group_id": {
+          "name": "selection_group_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "priority": {
+          "name": "priority",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "authorization_expression": {
+          "name": "authorization_expression",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "applicability_expression": {
+          "name": "applicability_expression",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "compiled_hash": {
+          "name": "compiled_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "semantic_hash": {
+          "name": "semantic_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_path": {
+          "name": "source_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "prompt_fragments_namespace_id_namespaces_id_fk": {
+          "name": "prompt_fragments_namespace_id_namespaces_id_fk",
+          "tableFrom": "prompt_fragments",
+          "tableTo": "namespaces",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "prompt_fragments_namespace_id_selection_group_id_selection_groups_namespace_id_id_fk": {
+          "name": "prompt_fragments_namespace_id_selection_group_id_selection_groups_namespace_id_id_fk",
+          "tableFrom": "prompt_fragments",
+          "tableTo": "selection_groups",
+          "columnsFrom": ["namespace_id", "selection_group_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "prompt_fragments_namespace_id_key_unique": {
+          "name": "prompt_fragments_namespace_id_key_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "key"]
+        },
+        "prompt_fragments_namespace_id_id_unique": {
+          "name": "prompt_fragments_namespace_id_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "prompt_fragments_status_check": {
+          "name": "prompt_fragments_status_check",
+          "value": "\"prompt_fragments\".\"status\" in ('draft', 'published', 'deprecated')"
+        },
+        "prompt_fragments_inclusion_check": {
+          "name": "prompt_fragments_inclusion_check",
+          "value": "\"prompt_fragments\".\"inclusion_mode\" in ('always','applicable','task_relevant')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.relation_types": {
+      "name": "relation_types",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_path": {
+          "name": "source_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "compiled_hash": {
+          "name": "compiled_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "relation_types_namespace_id_namespaces_id_fk": {
+          "name": "relation_types_namespace_id_namespaces_id_fk",
+          "tableFrom": "relation_types",
+          "tableTo": "namespaces",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "relation_types_namespace_id_key_unique": {
+          "name": "relation_types_namespace_id_key_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "key"]
+        },
+        "relation_types_namespace_id_id_unique": {
+          "name": "relation_types_namespace_id_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.retrieval_profiles": {
+      "name": "retrieval_profiles",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "config": {
+          "name": "config",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_path": {
+          "name": "source_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "compiled_hash": {
+          "name": "compiled_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "retrieval_profiles_namespace_id_namespaces_id_fk": {
+          "name": "retrieval_profiles_namespace_id_namespaces_id_fk",
+          "tableFrom": "retrieval_profiles",
+          "tableTo": "namespaces",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "retrieval_profiles_namespace_id_key_unique": {
+          "name": "retrieval_profiles_namespace_id_key_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "key"]
+        },
+        "retrieval_profiles_namespace_id_id_unique": {
+          "name": "retrieval_profiles_namespace_id_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.selection_groups": {
+      "name": "selection_groups",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "entity_type": {
+          "name": "entity_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mode": {
+          "name": "mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_path": {
+          "name": "source_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "compiled_hash": {
+          "name": "compiled_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "selection_groups_namespace_id_namespaces_id_fk": {
+          "name": "selection_groups_namespace_id_namespaces_id_fk",
+          "tableFrom": "selection_groups",
+          "tableTo": "namespaces",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "selection_groups_namespace_id_key_unique": {
+          "name": "selection_groups_namespace_id_key_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "key"]
+        },
+        "selection_groups_namespace_id_id_unique": {
+          "name": "selection_groups_namespace_id_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "selection_groups_entity_type_check": {
+          "name": "selection_groups_entity_type_check",
+          "value": "\"selection_groups\".\"entity_type\" in ('knowledge_chunk','prompt_fragment','skill','tool')"
+        },
+        "selection_groups_mode_check": {
+          "name": "selection_groups_mode_check",
+          "value": "\"selection_groups\".\"mode\" in ('highest_priority','most_specific','all')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.semantic_entities": {
+      "name": "semantic_entities",
+      "schema": "",
+      "columns": {
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entity_type": {
+          "name": "entity_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entity_id": {
+          "name": "entity_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "semantic_text": {
+          "name": "semantic_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "semantic_hash": {
+          "name": "semantic_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "embedding": {
+          "name": "embedding",
+          "type": "vector(1536)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "semantic_entities_type_idx": {
+          "name": "semantic_entities_type_idx",
+          "columns": [
+            {
+              "expression": "namespace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "entity_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "semantic_entities_embedding_hnsw_idx": {
+          "name": "semantic_entities_embedding_hnsw_idx",
+          "columns": [
+            {
+              "expression": "\"embedding\" vector_cosine_ops",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "hnsw",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "semantic_entities_namespace_id_namespaces_id_fk": {
+          "name": "semantic_entities_namespace_id_namespaces_id_fk",
+          "tableFrom": "semantic_entities",
+          "tableTo": "namespaces",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "semantic_entities_namespace_id_entity_type_entity_id_pk": {
+          "name": "semantic_entities_namespace_id_entity_type_entity_id_pk",
+          "columns": ["namespace_id", "entity_type", "entity_id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.skill_concepts": {
+      "name": "skill_concepts",
+      "schema": "",
+      "columns": {
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "skill_id": {
+          "name": "skill_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "concept_id": {
+          "name": "concept_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "skill_concepts_namespace_id_namespaces_id_fk": {
+          "name": "skill_concepts_namespace_id_namespaces_id_fk",
+          "tableFrom": "skill_concepts",
+          "tableTo": "namespaces",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "skill_concepts_namespace_id_skill_id_skills_namespace_id_id_fk": {
+          "name": "skill_concepts_namespace_id_skill_id_skills_namespace_id_id_fk",
+          "tableFrom": "skill_concepts",
+          "tableTo": "skills",
+          "columnsFrom": ["namespace_id", "skill_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "skill_concepts_namespace_id_concept_id_concepts_namespace_id_id_fk": {
+          "name": "skill_concepts_namespace_id_concept_id_concepts_namespace_id_id_fk",
+          "tableFrom": "skill_concepts",
+          "tableTo": "concepts",
+          "columnsFrom": ["namespace_id", "concept_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "skill_concepts_skill_id_concept_id_pk": {
+          "name": "skill_concepts_skill_id_concept_id_pk",
+          "columns": ["skill_id", "concept_id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.skill_prompt_fragments": {
+      "name": "skill_prompt_fragments",
+      "schema": "",
+      "columns": {
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "skill_id": {
+          "name": "skill_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "prompt_fragment_id": {
+          "name": "prompt_fragment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ordinal": {
+          "name": "ordinal",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "skill_prompt_fragments_namespace_id_namespaces_id_fk": {
+          "name": "skill_prompt_fragments_namespace_id_namespaces_id_fk",
+          "tableFrom": "skill_prompt_fragments",
+          "tableTo": "namespaces",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "skill_prompt_fragments_namespace_id_skill_id_skills_namespace_id_id_fk": {
+          "name": "skill_prompt_fragments_namespace_id_skill_id_skills_namespace_id_id_fk",
+          "tableFrom": "skill_prompt_fragments",
+          "tableTo": "skills",
+          "columnsFrom": ["namespace_id", "skill_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "skill_prompt_fragments_namespace_id_prompt_fragment_id_prompt_fragments_namespace_id_id_fk": {
+          "name": "skill_prompt_fragments_namespace_id_prompt_fragment_id_prompt_fragments_namespace_id_id_fk",
+          "tableFrom": "skill_prompt_fragments",
+          "tableTo": "prompt_fragments",
+          "columnsFrom": ["namespace_id", "prompt_fragment_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "skill_prompt_fragments_skill_id_prompt_fragment_id_pk": {
+          "name": "skill_prompt_fragments_skill_id_prompt_fragment_id_pk",
+          "columns": ["skill_id", "prompt_fragment_id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.skill_tools": {
+      "name": "skill_tools",
+      "schema": "",
+      "columns": {
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "skill_id": {
+          "name": "skill_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tool_id": {
+          "name": "tool_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "skill_tools_namespace_id_namespaces_id_fk": {
+          "name": "skill_tools_namespace_id_namespaces_id_fk",
+          "tableFrom": "skill_tools",
+          "tableTo": "namespaces",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "skill_tools_namespace_id_skill_id_skills_namespace_id_id_fk": {
+          "name": "skill_tools_namespace_id_skill_id_skills_namespace_id_id_fk",
+          "tableFrom": "skill_tools",
+          "tableTo": "skills",
+          "columnsFrom": ["namespace_id", "skill_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "skill_tools_namespace_id_tool_id_tools_namespace_id_id_fk": {
+          "name": "skill_tools_namespace_id_tool_id_tools_namespace_id_id_fk",
+          "tableFrom": "skill_tools",
+          "tableTo": "tools",
+          "columnsFrom": ["namespace_id", "tool_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "skill_tools_skill_id_tool_id_pk": {
+          "name": "skill_tools_skill_id_tool_id_pk",
+          "columns": ["skill_id", "tool_id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.skills": {
+      "name": "skills",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "selection_group_id": {
+          "name": "selection_group_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "priority": {
+          "name": "priority",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "authorization_expression": {
+          "name": "authorization_expression",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "applicability_expression": {
+          "name": "applicability_expression",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "semantic_text": {
+          "name": "semantic_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "semantic_hash": {
+          "name": "semantic_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_path": {
+          "name": "source_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "compiled_hash": {
+          "name": "compiled_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "skills_namespace_id_namespaces_id_fk": {
+          "name": "skills_namespace_id_namespaces_id_fk",
+          "tableFrom": "skills",
+          "tableTo": "namespaces",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "skills_namespace_id_selection_group_id_selection_groups_namespace_id_id_fk": {
+          "name": "skills_namespace_id_selection_group_id_selection_groups_namespace_id_id_fk",
+          "tableFrom": "skills",
+          "tableTo": "selection_groups",
+          "columnsFrom": ["namespace_id", "selection_group_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "skills_namespace_id_key_unique": {
+          "name": "skills_namespace_id_key_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "key"]
+        },
+        "skills_namespace_id_id_unique": {
+          "name": "skills_namespace_id_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "skills_status_check": {
+          "name": "skills_status_check",
+          "value": "\"skills\".\"status\" in ('draft', 'published', 'deprecated')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.template_prompt_fragments": {
+      "name": "template_prompt_fragments",
+      "schema": "",
+      "columns": {
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "template_id": {
+          "name": "template_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "prompt_fragment_id": {
+          "name": "prompt_fragment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ordinal": {
+          "name": "ordinal",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "template_prompt_fragments_namespace_id_namespaces_id_fk": {
+          "name": "template_prompt_fragments_namespace_id_namespaces_id_fk",
+          "tableFrom": "template_prompt_fragments",
+          "tableTo": "namespaces",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "template_prompt_fragments_namespace_id_template_id_agent_templates_namespace_id_id_fk": {
+          "name": "template_prompt_fragments_namespace_id_template_id_agent_templates_namespace_id_id_fk",
+          "tableFrom": "template_prompt_fragments",
+          "tableTo": "agent_templates",
+          "columnsFrom": ["namespace_id", "template_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "template_prompt_fragments_namespace_id_prompt_fragment_id_prompt_fragments_namespace_id_id_fk": {
+          "name": "template_prompt_fragments_namespace_id_prompt_fragment_id_prompt_fragments_namespace_id_id_fk",
+          "tableFrom": "template_prompt_fragments",
+          "tableTo": "prompt_fragments",
+          "columnsFrom": ["namespace_id", "prompt_fragment_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "template_prompt_fragments_template_id_prompt_fragment_id_pk": {
+          "name": "template_prompt_fragments_template_id_prompt_fragment_id_pk",
+          "columns": ["template_id", "prompt_fragment_id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.tool_concepts": {
+      "name": "tool_concepts",
+      "schema": "",
+      "columns": {
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tool_id": {
+          "name": "tool_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "concept_id": {
+          "name": "concept_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "tool_concepts_namespace_id_namespaces_id_fk": {
+          "name": "tool_concepts_namespace_id_namespaces_id_fk",
+          "tableFrom": "tool_concepts",
+          "tableTo": "namespaces",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "tool_concepts_namespace_id_tool_id_tools_namespace_id_id_fk": {
+          "name": "tool_concepts_namespace_id_tool_id_tools_namespace_id_id_fk",
+          "tableFrom": "tool_concepts",
+          "tableTo": "tools",
+          "columnsFrom": ["namespace_id", "tool_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "tool_concepts_namespace_id_concept_id_concepts_namespace_id_id_fk": {
+          "name": "tool_concepts_namespace_id_concept_id_concepts_namespace_id_id_fk",
+          "tableFrom": "tool_concepts",
+          "tableTo": "concepts",
+          "columnsFrom": ["namespace_id", "concept_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "tool_concepts_tool_id_concept_id_pk": {
+          "name": "tool_concepts_tool_id_concept_id_pk",
+          "columns": ["tool_id", "concept_id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.tool_dependencies": {
+      "name": "tool_dependencies",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_tool_id": {
+          "name": "source_tool_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_tool_id": {
+          "name": "target_tool_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "requirement": {
+          "name": "requirement",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_path": {
+          "name": "source_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "tool_dependencies_source_idx": {
+          "name": "tool_dependencies_source_idx",
+          "columns": [
+            {
+              "expression": "namespace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "source_tool_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "tool_dependencies_target_idx": {
+          "name": "tool_dependencies_target_idx",
+          "columns": [
+            {
+              "expression": "namespace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "target_tool_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "tool_dependencies_namespace_id_namespaces_id_fk": {
+          "name": "tool_dependencies_namespace_id_namespaces_id_fk",
+          "tableFrom": "tool_dependencies",
+          "tableTo": "namespaces",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "tool_dependencies_namespace_id_source_tool_id_tools_namespace_id_id_fk": {
+          "name": "tool_dependencies_namespace_id_source_tool_id_tools_namespace_id_id_fk",
+          "tableFrom": "tool_dependencies",
+          "tableTo": "tools",
+          "columnsFrom": ["namespace_id", "source_tool_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "tool_dependencies_namespace_id_target_tool_id_tools_namespace_id_id_fk": {
+          "name": "tool_dependencies_namespace_id_target_tool_id_tools_namespace_id_id_fk",
+          "tableFrom": "tool_dependencies",
+          "tableTo": "tools",
+          "columnsFrom": ["namespace_id", "target_tool_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "tool_dependencies_namespace_id_source_tool_id_target_tool_id_unique": {
+          "name": "tool_dependencies_namespace_id_source_tool_id_target_tool_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "source_tool_id", "target_tool_id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "tool_dependencies_requirement_check": {
+          "name": "tool_dependencies_requirement_check",
+          "value": "\"tool_dependencies\".\"requirement\" in ('required','optional')"
+        },
+        "tool_dependencies_no_self": {
+          "name": "tool_dependencies_no_self",
+          "value": "\"tool_dependencies\".\"source_tool_id\" <> \"tool_dependencies\".\"target_tool_id\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.tools": {
+      "name": "tools",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "namespace_id": {
+          "name": "namespace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "runtime_binding": {
+          "name": "runtime_binding",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "risk": {
+          "name": "risk",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "latency": {
+          "name": "latency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "selection_group_id": {
+          "name": "selection_group_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "priority": {
+          "name": "priority",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "authorization_expression": {
+          "name": "authorization_expression",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "applicability_expression": {
+          "name": "applicability_expression",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "semantic_text": {
+          "name": "semantic_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "semantic_hash": {
+          "name": "semantic_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "input_schema": {
+          "name": "input_schema",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "output_schema": {
+          "name": "output_schema",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_path": {
+          "name": "source_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "compiled_hash": {
+          "name": "compiled_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "tools_namespace_id_namespaces_id_fk": {
+          "name": "tools_namespace_id_namespaces_id_fk",
+          "tableFrom": "tools",
+          "tableTo": "namespaces",
+          "columnsFrom": ["namespace_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "tools_namespace_id_selection_group_id_selection_groups_namespace_id_id_fk": {
+          "name": "tools_namespace_id_selection_group_id_selection_groups_namespace_id_id_fk",
+          "tableFrom": "tools",
+          "tableTo": "selection_groups",
+          "columnsFrom": ["namespace_id", "selection_group_id"],
+          "columnsTo": ["namespace_id", "id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "tools_namespace_id_key_unique": {
+          "name": "tools_namespace_id_key_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "key"]
+        },
+        "tools_namespace_id_id_unique": {
+          "name": "tools_namespace_id_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["namespace_id", "id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "tools_status_check": {
+          "name": "tools_status_check",
+          "value": "\"tools\".\"status\" in ('draft', 'published', 'deprecated')"
+        },
+        "tools_risk_check": {
+          "name": "tools_risk_check",
+          "value": "\"tools\".\"risk\" is null or \"tools\".\"risk\" in ('read','write','destructive','privileged')"
+        },
+        "tools_latency_check": {
+          "name": "tools_latency_check",
+          "value": "\"tools\".\"latency\" is null or \"tools\".\"latency\" in ('local','fast_remote','slow_remote')"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

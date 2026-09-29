@@ -1,0 +1,7 @@
+{
+  "id": "019d0000-0000-7000-8000-000000000021",
+  "key": "sales-pipeline",
+  "name": "Sales Pipeline",
+  "type": "business-object",
+  "domains": ["sales"]
+}

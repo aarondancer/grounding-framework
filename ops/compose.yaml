@@ -1,0 +1,39 @@
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.6-pg17
+    environment:
+      POSTGRES_DB: grounding
+      POSTGRES_USER: grounding
+      POSTGRES_PASSWORD: grounding
+    ports:
+      - "5432:5432"
+    volumes:
+      - grounding-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U grounding -d grounding"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  valkey:
+    image: valkey/valkey:9.1.2
+    command:
+      - valkey-server
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --maxmemory
+      - 512mb
+      - --maxmemory-policy
+      - allkeys-lfu
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  grounding-postgres:

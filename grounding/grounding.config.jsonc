@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "repository": {
+    "provider": "github",
+    "url": "https://github.com/example/example-app"
+  },
+  "embedding": {
+    "provider": "openai-compatible",
+    "model": "example-embedding-model",
+    "dimensions": 1536
+  },
+  "chunking": {
+    "maxCharacters": 6000
+  }
+}

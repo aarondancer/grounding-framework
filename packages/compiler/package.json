@@ -1,0 +1,21 @@
+{
+  "name": "@grounding/compiler",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@grounding/core": "workspace:*",
+    "@grounding/db": "workspace:*",
+    "@grounding/embeddings": "workspace:*",
+    "@grounding/markdown": "workspace:*",
+    "@grounding/source": "workspace:*",
+    "chokidar": "5.0.0",
+    "fast-glob": "3.3.3"
+  }
+}

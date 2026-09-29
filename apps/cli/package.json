@@ -1,0 +1,22 @@
+{
+  "name": "@grounding/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "grounding": "./src/index.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@grounding/compiler": "workspace:*",
+    "@grounding/core": "workspace:*",
+    "@grounding/db": "workspace:*",
+    "@grounding/source": "workspace:*",
+    "commander": "15.0.0"
+  }
+}

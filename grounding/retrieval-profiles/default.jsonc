@@ -1,0 +1,14 @@
+{
+  "id": "019d0000-0000-7000-8000-000000000070",
+  "key": "default",
+  "name": "Default",
+  "candidates": { "vector": 60, "fullText": 40, "trigram": 20, "conceptLinked": 30 },
+  "concepts": { "maxSeeds": 4 },
+  "graph": {
+    "maxDepth": 1,
+    "candidateLimit": 30,
+    "direction": "both",
+    "relationTypes": ["related_to", "measures"]
+  },
+  "packing": { "maxChunks": 10, "maxTokens": 7000, "maxChunksPerItem": 3 }
+}

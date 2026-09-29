@@ -1,0 +1,7 @@
+{
+  "id": "019d0000-0000-7000-8000-000000000060",
+  "key": "pipeline-guidance",
+  "name": "Pipeline Guidance",
+  "entityType": "knowledge_chunk",
+  "mode": "highest_priority"
+}

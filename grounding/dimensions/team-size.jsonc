@@ -1,0 +1,13 @@
+{
+  "id": "019d0000-0000-7000-8000-00000000005a",
+  "key": "teamSize",
+  "name": "Team Size",
+  "valueType": "number",
+  "cardinality": "single",
+  "category": "applicability",
+  "allowedOperators": ["equals", "gt", "gte", "lt", "lte", "between", "exists"],
+  "hierarchical": false,
+  "required": false,
+  "missingValueBehavior": "no_match",
+  "trust": "request"
+}

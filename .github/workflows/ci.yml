@@ -1,0 +1,64 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start PostgreSQL + Valkey
+        run: docker compose -f ops/compose.yaml up -d --wait
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Migrate
+        run: bun run migrate
+        env:
+          DATABASE_URL: postgresql://grounding:grounding@localhost:5432/grounding
+
+      - name: Test
+        run: bun run test
+        env:
+          DATABASE_URL: postgresql://grounding:grounding@localhost:5432/grounding
+          VALKEY_ADDRESSES: localhost:6379
+          VALKEY_MODE: standalone
+          GROUNDING_ENV: local
+
+      - name: Production build
+        run: bun run --filter='@grounding/web' build
+
+      - name: Production boot smoke
+        env:
+          DATABASE_URL: postgresql://grounding:grounding@localhost:5432/grounding
+          VALKEY_ADDRESSES: localhost:6379
+          VALKEY_MODE: standalone
+          GROUNDING_ENV: local
+          PORT: "3123"
+        run: |
+          bun apps/web/.output/server/index.mjs &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            curl -fsS -o /dev/null http://localhost:3123/healthz && break || sleep 1
+          done
+          curl -fsS http://localhost:3123/healthz | grep -q '"valkey":true'
+          curl -fsS http://localhost:3123/readyz | grep -q '"ready":true'
+          curl -fsS -X POST http://localhost:3123/graphql \
+            -H 'content-type: application/json' \
+            -d '{"query":"{ runtimeInfo { environment } }"}' | grep -q '"environment":"local"'

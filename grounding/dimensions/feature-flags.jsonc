@@ -1,0 +1,13 @@
+{
+  "id": "019d0000-0000-7000-8000-000000000059",
+  "key": "featureFlags",
+  "name": "Feature Flags",
+  "valueType": "string",
+  "cardinality": "multi",
+  "category": "applicability",
+  "allowedOperators": ["includes", "includes_any", "includes_all", "exists"],
+  "hierarchical": false,
+  "required": false,
+  "missingValueBehavior": "no_match",
+  "trust": "server"
+}

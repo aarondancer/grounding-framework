@@ -1,0 +1,16 @@
+{
+  "name": "@grounding/cache",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@grounding/core": "workspace:*",
+    "@valkey/valkey-glide": "2.5.3"
+  }
+}
