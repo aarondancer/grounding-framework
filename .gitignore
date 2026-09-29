@@ -17,7 +17,8 @@ dist/
 
 # TanStack generated
 .tanstack/
-apps/web/src/routeTree.gen.ts
+# routeTree.gen.ts IS committed — component/route tests import it, and
+# `bun test` must work on a clean checkout without running tsr generate.
 
 # Compiler state
 .grounding/

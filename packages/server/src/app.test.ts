@@ -28,7 +28,10 @@ describe("server app", () => {
     );
     // db is null in this test app, so runtimeInfo errors — but GraphQL itself responds.
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { errors?: { message: string }[] };
-    expect(body.errors?.[0]?.message).toContain("database not configured");
+    const body = (await res.json()) as {
+      errors?: { message: string; extensions?: { code?: string } }[];
+    };
+    // Assert the stable spec/14 code, not the (free-form) message text.
+    expect(body.errors?.[0]?.extensions?.code).toBe("INTERNAL_ERROR");
   });
 });

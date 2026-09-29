@@ -4,7 +4,7 @@ import { PageHeader, Pager, StatusBadge } from "../components/ui";
 import { CONCEPTS } from "../lib/api";
 import { browseSearch } from "../lib/list";
 
-export const Route = createFileRoute("/explore/concepts")({
+export const Route = createFileRoute("/explore/concepts/")({
   validateSearch: browseSearch,
   loaderDeps: ({ search }) => search,
   loader: async ({ context, deps }) => {

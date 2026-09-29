@@ -1,15 +1,27 @@
-import { describe, expect } from "bun:test";
-import { dbTest as it } from "@grounding/test-support";
+import { beforeAll, describe, expect } from "bun:test";
+import { dbTest as it, rebuildCanonicalCorpus, servicesConfigured } from "@grounding/test-support";
 
 /**
- * Real-PostgreSQL registry load: requires the canonical example corpus to be
- * materialized (DATABASE_URL set; `grounding build` run or CI pipeline). The
- * canonical corpus authors hierarchical `regions` (US → US-TX), server-trusted
+ * Real-PostgreSQL registry load over the canonical example corpus. The suite
+ * provisions its own fixture (docs/testing rule 3) — nothing may depend on
+ * another file having built the canonical corpus first.
+ * The canonical corpus authors hierarchical `regions` (US → US-TX), server-trusted
  * `permissions`, and flat enum `products`.
  */
 const CANONICAL_NS = "019d0000-0000-7000-8000-000000000001";
 
 describe("dimension registry (real postgres)", () => {
+  beforeAll(async () => {
+    if (!servicesConfigured()) return;
+    const { connect } = await import("./client.ts");
+    const conn = connect();
+    try {
+      await rebuildCanonicalCorpus(conn.db);
+    } finally {
+      await conn.pool.end();
+    }
+  });
+
   it("loads materialized dimensions + closure and evaluates hierarchically", async () => {
     const { connect } = await import("./client.ts");
     const { loadDimensionRegistry } = await import("./dimension-registry.ts");

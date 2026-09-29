@@ -167,6 +167,9 @@
         "drizzle-orm": "0.45.3",
         "jsonc-parser": "3.3.1",
       },
+      "devDependencies": {
+        "@grounding/test-support": "workspace:*",
+      },
     },
     "packages/graphql": {
       "name": "@grounding/graphql",
@@ -263,6 +266,14 @@
         "@grounding/embeddings": "workspace:*",
         "@grounding/source": "workspace:*",
         "drizzle-orm": "0.45.3",
+      },
+    },
+    "tests/e2e": {
+      "name": "@grounding/e2e-tests",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@grounding/server": "workspace:*",
+        "@grounding/test-support": "workspace:*",
       },
     },
   },
@@ -524,6 +535,8 @@
     "@grounding/core": ["@grounding/core@workspace:packages/core"],
 
     "@grounding/db": ["@grounding/db@workspace:packages/db"],
+
+    "@grounding/e2e-tests": ["@grounding/e2e-tests@workspace:tests/e2e"],
 
     "@grounding/embeddings": ["@grounding/embeddings@workspace:packages/embeddings"],
 

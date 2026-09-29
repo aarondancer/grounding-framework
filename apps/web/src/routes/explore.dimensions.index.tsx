@@ -9,7 +9,7 @@ import { useSimulatedContext } from "../lib/sim-context";
 
 export type Dim = DimensionsQuery["dimensions"][number];
 
-export const Route = createFileRoute("/explore/dimensions")({
+export const Route = createFileRoute("/explore/dimensions/")({
   loader: async ({ context }) => {
     const res = await context.urql.query(DIMENSIONS, {}).toPromise();
     if (res.error) throw res.error;

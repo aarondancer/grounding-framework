@@ -3,7 +3,7 @@ import { DataTable } from "../components/table";
 import { PageHeader, StatusBadge } from "../components/ui";
 import { TEMPLATES } from "../lib/api";
 
-export const Route = createFileRoute("/assembly/templates")({
+export const Route = createFileRoute("/assembly/templates/")({
   loader: async ({ context }) => {
     const res = await context.urql.query(TEMPLATES, {}).toPromise();
     if (res.error) throw res.error;

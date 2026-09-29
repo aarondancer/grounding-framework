@@ -32,7 +32,8 @@ export type GraphEdge = {
 const W = 190;
 const H = 56;
 
-function layout(nodes: GraphNode[], edges: GraphEdge[]): { nodes: Node[]; edges: Edge[] } {
+/** Pure Dagre layout + React Flow node/edge mapping — exported for tests. */
+export function layout(nodes: GraphNode[], edges: GraphEdge[]): { nodes: Node[]; edges: Edge[] } {
   const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
   g.setGraph({ rankdir: "LR", nodesep: 30, ranksep: 90 });
   for (const n of nodes) g.setNode(n.id, { width: W, height: H });

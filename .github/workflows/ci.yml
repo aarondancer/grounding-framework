@@ -47,7 +47,8 @@ jobs:
           DATABASE_URL: postgresql://grounding:grounding@localhost:5432/grounding
 
       - name: Test
-        run: bun run test
+        # apps + packages only: tests/e2e is local-only per docs/testing layer 5.
+        run: bun test apps packages
         env:
           DATABASE_URL: postgresql://grounding:grounding@localhost:5432/grounding
           VALKEY_ADDRESSES: localhost:6379

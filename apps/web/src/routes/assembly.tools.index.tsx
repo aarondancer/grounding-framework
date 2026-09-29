@@ -4,7 +4,7 @@ import { PageHeader, Pager, StatusBadge } from "../components/ui";
 import { TOOLS } from "../lib/api";
 import { browseSearch } from "../lib/list";
 
-export const Route = createFileRoute("/assembly/tools")({
+export const Route = createFileRoute("/assembly/tools/")({
   validateSearch: browseSearch,
   loaderDeps: ({ search }) => search,
   loader: async ({ context, deps }) => {

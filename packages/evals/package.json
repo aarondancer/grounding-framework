@@ -17,5 +17,8 @@
     "@grounding/source": "workspace:*",
     "drizzle-orm": "0.45.3",
     "jsonc-parser": "3.3.1"
+  },
+  "devDependencies": {
+    "@grounding/test-support": "workspace:*"
   }
 }

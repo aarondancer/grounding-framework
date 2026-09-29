@@ -3,7 +3,7 @@ import { DataTable } from "../components/table";
 import { PageHeader } from "../components/ui";
 import { SELECTION_GROUPS } from "../lib/api";
 
-export const Route = createFileRoute("/explore/selection-groups")({
+export const Route = createFileRoute("/explore/selection-groups/")({
   loader: async ({ context }) => {
     const res = await context.urql.query(SELECTION_GROUPS, {}).toPromise();
     if (res.error) throw res.error;

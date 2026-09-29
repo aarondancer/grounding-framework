@@ -5,6 +5,7 @@ import {
   CachedEmbedder,
   deterministicProvider,
   openaiCompatibleProvider,
+  resolveEmbeddingRuntime,
   resolveProvider,
 } from "./index.ts";
 
@@ -117,6 +118,38 @@ describe("CachedEmbedder", () => {
     await new CachedEmbedder(cache, "a").embed(counting, items(["x"]));
     await new CachedEmbedder(cache, "b").embed(counting, items(["x"]));
     expect(p.calls).toBe(2);
+  });
+});
+
+describe("resolveEmbeddingRuntime", () => {
+  test("resolves provider + configHash from authored config", () => {
+    const rt = resolveEmbeddingRuntime(
+      { provider: "deterministic", model: "m", dimensions: 8 },
+      {},
+    );
+    expect(rt?.provider.provider).toBe("deterministic");
+    expect(rt?.configHash).toMatch(/^[0-9a-f]+$/);
+  });
+
+  test("unresolvable config returns null (vector channel degrades)", () => {
+    expect(resolveEmbeddingRuntime(undefined, {})).toBeNull();
+    expect(resolveEmbeddingRuntime({ provider: "bogus", dimensions: 4 }, {})).toBeNull();
+  });
+
+  test("env override changes the config hash (spec/16 key semantics)", () => {
+    const authored = resolveEmbeddingRuntime(
+      { provider: "deterministic", model: "m", dimensions: 8 },
+      {},
+    );
+    const overridden = resolveEmbeddingRuntime(
+      { provider: "deterministic", model: "m", dimensions: 8 },
+      {
+        GROUNDING_EMBEDDING_PROVIDER: "openai-compatible",
+        GROUNDING_EMBEDDING_BASE_URL: "http://x",
+      },
+    );
+    expect(overridden?.provider.provider).toBe("openai-compatible");
+    expect(overridden?.configHash).not.toBe(authored?.configHash);
   });
 });
 

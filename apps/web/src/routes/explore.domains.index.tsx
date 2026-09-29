@@ -4,7 +4,7 @@ import { PageHeader, Pager, SourceLink } from "../components/ui";
 import { DOMAINS } from "../lib/api";
 import { browseSearch } from "../lib/list";
 
-export const Route = createFileRoute("/explore/domains")({
+export const Route = createFileRoute("/explore/domains/")({
   validateSearch: browseSearch,
   loaderDeps: ({ search }) => search,
   loader: async ({ context, deps }) => {

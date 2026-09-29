@@ -4,7 +4,7 @@ import { PageHeader, Pager, StatusBadge } from "../components/ui";
 import { KNOWLEDGE_ITEMS } from "../lib/api";
 import { browseSearch } from "../lib/list";
 
-export const Route = createFileRoute("/explore/knowledge")({
+export const Route = createFileRoute("/explore/knowledge/")({
   validateSearch: browseSearch,
   loaderDeps: ({ search }) => search,
   loader: async ({ context, deps }) => {
